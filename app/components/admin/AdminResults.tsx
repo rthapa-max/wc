@@ -21,6 +21,12 @@ function normalizeScore(raw: string) {
   return digits.replace(/^0+(?=\d)/, "");
 }
 
+function parseScoreInput(raw: string): number {
+  if (raw === "") return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 function AdminResultRow({
   row,
   busy,
@@ -192,8 +198,8 @@ export function AdminResults() {
   async function complete(id: string, hs: string, as: string) {
     setErr(null);
     setBusyId(id);
-    const homeScore = hs === "" ? NaN : Number(hs);
-    const awayScore = as === "" ? NaN : Number(as);
+    const homeScore = parseScoreInput(hs);
+    const awayScore = parseScoreInput(as);
     if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore) || homeScore < 0 || awayScore < 0) {
       setErr("Enter valid scores before marking complete.");
       setBusyId(null);

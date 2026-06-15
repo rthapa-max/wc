@@ -113,13 +113,7 @@ export async function GET(_req: Request, context: RouteContext) {
   const list = rows
     .map((row) => {
       const profile = usersById.get(row.user_id);
-      const points = predictionPoints(
-        row.home_score,
-        row.away_score,
-        row.winner,
-        resultHome,
-        resultAway,
-      );
+      const points = predictionPoints(row.home_score, row.away_score, resultHome, resultAway);
       return {
         userId: row.user_id,
         displayName: profile ? userDisplay(profile) : "Unknown user",

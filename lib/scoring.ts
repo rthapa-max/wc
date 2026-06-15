@@ -9,14 +9,14 @@ export function outcomeFromScore(home: number, away: number): MatchOutcome {
 export function predictionPoints(
   predictedHome: number,
   predictedAway: number,
-  predictedWinner: MatchOutcome,
   resultHome: number,
   resultAway: number,
 ): number {
   if (resultHome === predictedHome && resultAway === predictedAway) return 3;
 
-  const resultWinner = outcomeFromScore(resultHome, resultAway);
-  if (resultWinner === predictedWinner) return 2;
+  const predictedOutcome = outcomeFromScore(predictedHome, predictedAway);
+  const resultOutcome = outcomeFromScore(resultHome, resultAway);
+  if (resultOutcome === predictedOutcome) return 2;
 
   return 1;
 }

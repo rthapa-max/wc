@@ -83,6 +83,16 @@ alter table public.fixtures
 alter table public.fixtures
   add constraint fixtures_status_check check (status in ('scheduled','pending','finished'));
 
+create table if not exists public.predictions (
+  user_id uuid not null references public.app_users (id) on delete cascade,
+  fixture_id text not null references public.fixtures (id) on delete cascade,
+  winner text not null check (winner in ('home','away','draw')),
+  home_score int not null check (home_score >= 0),
+  away_score int not null check (away_score >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, fixture_id)
+);
+
 -- Migration helper: older versions used predictions.match_key instead of predictions.fixture_id
 do $$
 begin
@@ -114,16 +124,6 @@ end $$;
 -- Ensure the new column exists even if the table existed before.
 alter table public.predictions
   add column if not exists fixture_id text;
-
-create table if not exists public.predictions (
-  user_id uuid not null references public.app_users (id) on delete cascade,
-  fixture_id text not null references public.fixtures (id) on delete cascade,
-  winner text not null check (winner in ('home','away','draw')),
-  home_score int not null check (home_score >= 0),
-  away_score int not null check (away_score >= 0),
-  updated_at timestamptz not null default now(),
-  primary key (user_id, fixture_id)
-);
 
 -- If predictions table already existed, enforce new PK/FK shape.
 alter table public.predictions
@@ -181,12 +181,17 @@ select
   f.result_away_score,
   case
     when f.status <> 'finished' then null
-    when f.result_home_score = p.home_score and f.result_away_score = p.away_score then 3
-    when (
-      (f.result_home_score > f.result_away_score and p.winner = 'home') or
-      (f.result_home_score < f.result_away_score and p.winner = 'away') or
-      (f.result_home_score = f.result_away_score and p.winner = 'draw')
-    ) then 2
+    when f.result_home_score is not null
+      and f.result_away_score is not null
+      and f.result_home_score = p.home_score
+      and f.result_away_score = p.away_score then 3
+    when f.result_home_score is not null
+      and f.result_away_score is not null
+      and (
+        (f.result_home_score > f.result_away_score and p.home_score > p.away_score) or
+        (f.result_home_score < f.result_away_score and p.home_score < p.away_score) or
+        (f.result_home_score = f.result_away_score and p.home_score = p.away_score)
+      ) then 2
     else 1
   end as points
 from public.predictions p

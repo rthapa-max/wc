@@ -99,36 +99,7 @@ function buildPredictionWindowClosedHtml(payload: PredictionWindowClosedPayload)
 }
 
 export const PREDICTION_NOTIFY_EMAILS = [
-  "adangi@clarosanalytics.com",
-  "sshrestha@clarosanalytics.com",
-  "nwaiba@clarosanalytics.com",
-  "rthapa@clarosanalytics.com",
-  "cghimire@clarosanalytics.com",
-  "dshrestha@clarosanalytics.com",
-  "sbajracharya@clarosanalytics.com",
-  "sparajuli@clarosanalytics.com",
-  "rpradhan@clarosanalytics.com",
-  "mrauniyar@clarosanalytics.com",
-  "psthapit@clarosanalytics.com",
-  "ggiri@clarosanalytics.com",
-  "bvaidya@clarosanalytics.com",
-  "rupakt525@gmail.com",
-  "rupakisdeveloper@gmail.com",
-
-  "trobinson@wspactuaries.com",
-  "todd@clarosanalytics.com",
-  "nsachdeva@clarosanalytics.com",
-  "mowen@clarosanalytics.com",
-  "gmiller@clarosanalytics.com",
-  "sbowman@wspactuaries.com",
-  "dwolsk@clarosanalytics.com",
-  "jdare@clarosanalytics.com",
-  "jsouthward@clarosanalytics.com",
-  "eweiner@clarosanalytics.com",
-  "ppatel@clarosanalytics.com",
-  "ericawclaros@gmail.com",
-  "svaidya@clarosanalytics.com",
-  "stillett@clarosanalytics.com"
+ 
 ] as const;
 
 export function getPredictionNotifyEmails() {

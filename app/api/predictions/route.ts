@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSessionCookieName, verifySession } from "@/lib/auth";
+import { outcomeFromScore } from "@/lib/scoring";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { getPredictionWindowState, kickoffMsFromFixtureRow } from "@/lib/kickoff";
 
@@ -76,15 +77,16 @@ export async function PUT(req: Request) {
     | null;
 
   const fixtureId = body?.fixtureId;
-  const winner = body?.winner;
-  const homeScore = body?.homeScore;
-  const awayScore = body?.awayScore;
+  const homeScore = Number(body?.homeScore);
+  const awayScore = Number(body?.awayScore);
 
   if (!fixtureId) return NextResponse.json({ ok: false, message: "Missing fixtureId" }, { status: 400 });
-  if (winner !== "home" && winner !== "away" && winner !== "draw")
-    return NextResponse.json({ ok: false, message: "Invalid winner" }, { status: 400 });
-  if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore) || homeScore! < 0 || awayScore! < 0)
+  if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore) || homeScore < 0 || awayScore < 0)
     return NextResponse.json({ ok: false, message: "Invalid score" }, { status: 400 });
+
+  const home = Math.floor(homeScore);
+  const away = Math.floor(awayScore);
+  const winner = outcomeFromScore(home, away);
 
   let supabase;
   try {
@@ -124,8 +126,8 @@ export async function PUT(req: Request) {
       user_id: user.id,
       fixture_id: fixtureId,
       winner,
-      home_score: Math.floor(homeScore!),
-      away_score: Math.floor(awayScore!),
+      home_score: home,
+      away_score: away,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id,fixture_id" },

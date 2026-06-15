@@ -281,7 +281,6 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
     return predictionPoints(
       prediction.homeScore,
       prediction.awayScore,
-      prediction.winner,
       match.resultHomeScore!,
       match.resultAwayScore!,
     );
