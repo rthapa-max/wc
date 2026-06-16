@@ -3,26 +3,27 @@ const RULES = [
     points: 3,
     label: "Exact score or draw",
     example:
-      "Team A vs B — pick 2-1 and result is 2-1, or pick 1-1 draw and result is 1-1.",
+      "Pick 2-1 and result is 2-1, or pick 0-0 and result is 0-0, or pick 1-1 and result is 1-1.",
     tone: "primary" as const,
   },
   {
     points: 2,
     label: "Correct winner",
-    example: "Team A vs B — pick 3-2, result 2-1 (right winner, wrong goals).",
+    example:
+      "Pick 3-2, result 2-1 (right winner). Pick 0-0, result 1-1 (draw, wrong score). Pick 1-3, result 0-2 (right winner).",
     tone: "yellow" as const,
   },
   {
     points: 1,
     label: "Participated",
     example:
-      "Team A vs B — pick 2-0, result 1-2 (wrong score and wrong winner) still earns 1 pt.",
+      "Pick 0-0, result 2-0 (wrong outcome). Pick 2-0, result 1-2 (wrong winner and score). Any saved pick on a finished match earns 1 pt.",
     tone: "surface" as const,
   },
   {
     points: 0,
     label: "No prediction",
-    example: "No pick submitted for the match.",
+    example: "No pick submitted before predictions closed (1 hour before kickoff).",
     tone: "muted" as const,
   },
 ] as const;

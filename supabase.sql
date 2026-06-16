@@ -173,7 +173,11 @@ create view public.prediction_points as
 select
   p.user_id,
   p.fixture_id,
-  p.winner as predicted_winner,
+  case
+    when p.home_score > p.away_score then 'home'
+    when p.home_score < p.away_score then 'away'
+    else 'draw'
+  end as predicted_winner,
   p.home_score as predicted_home_score,
   p.away_score as predicted_away_score,
   f.status as fixture_status,

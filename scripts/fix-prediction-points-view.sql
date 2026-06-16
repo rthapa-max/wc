@@ -1,5 +1,19 @@
 -- Refresh scoring view (0-0 safe: outcome derived from scores, not winner column).
+-- Fixes: 0-0 predictions now always earn 1 pt (participation) or 3 pts (exact).
 -- Run in Supabase SQL editor on existing projects.
+
+-- Keep winner column aligned with stored scores (legacy rows may have wrong winner for 0-0).
+update public.predictions
+set winner = case
+  when home_score > away_score then 'home'
+  when home_score < away_score then 'away'
+  else 'draw'
+end
+where winner is distinct from case
+  when home_score > away_score then 'home'
+  when home_score < away_score then 'away'
+  else 'draw'
+end;
 
 drop view if exists public.leaderboard;
 drop view if exists public.prediction_points;
@@ -8,7 +22,11 @@ create view public.prediction_points as
 select
   p.user_id,
   p.fixture_id,
-  p.winner as predicted_winner,
+  case
+    when p.home_score > p.away_score then 'home'
+    when p.home_score < p.away_score then 'away'
+    else 'draw'
+  end as predicted_winner,
   p.home_score as predicted_home_score,
   p.away_score as predicted_away_score,
   f.status as fixture_status,
