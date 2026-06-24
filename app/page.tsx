@@ -25,7 +25,7 @@ export default function Home() {
             </div>
 
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-8 lg:items-start">
-              <section className="lg:col-span-8">
+              <section className="lg:col-span-7">
                 <div className="mb-5 sm:mb-6">
                   <h2 className="font-semibold text-base text-primary-text sm:text-lg">Fixtures</h2>
                   <p className="mt-1.5 text-sm text-secondary-text">
@@ -35,7 +35,7 @@ export default function Home() {
                 <FixturesFromSupabase />
               </section>
 
-              <section className="lg:col-span-4">
+              <section className="lg:col-span-5">
                 <LeaderboardTable />
               </section>
             </div>
