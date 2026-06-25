@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchAllRows } from "@/lib/supabasePaginate";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
 export async function GET() {
@@ -21,19 +22,25 @@ export async function GET() {
     return NextResponse.json({ ok: false, message: usersError.message }, { status: 500 });
   }
 
-  const [{ data: pointRows, error: pointsError }, { data: predictionRows, error: predictionsError }] =
-    await Promise.all([
-      supabase.from("prediction_points").select("user_id,points"),
-      supabase.from("predictions").select("user_id"),
-    ]);
+  const [pointResult, predictionResult] = await Promise.all([
+    fetchAllRows<{ user_id: string; points: number | null }>((from, to) =>
+      supabase.from("prediction_points").select("user_id,points").range(from, to),
+    ),
+    fetchAllRows<{ user_id: string }>((from, to) =>
+      supabase.from("predictions").select("user_id").range(from, to),
+    ),
+  ]);
 
-  if (pointsError) {
-    return NextResponse.json({ ok: false, message: pointsError.message }, { status: 500 });
+  if (pointResult.error) {
+    return NextResponse.json({ ok: false, message: pointResult.error }, { status: 500 });
   }
 
-  if (predictionsError) {
-    return NextResponse.json({ ok: false, message: predictionsError.message }, { status: 500 });
+  if (predictionResult.error) {
+    return NextResponse.json({ ok: false, message: predictionResult.error }, { status: 500 });
   }
+
+  const pointRows = pointResult.data;
+  const predictionRows = predictionResult.data;
 
   const pointsByUser = new Map<string, number>();
   for (const row of pointRows ?? []) {
