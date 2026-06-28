@@ -1,6 +1,14 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSessionCookieName, verifySession } from "@/lib/auth";
+import {
+  etScoresFromWinner,
+  etWinnerFromScores,
+  isDrawScore,
+  validateKnockoutPrediction,
+  type EtWinnerPick,
+} from "@/lib/knockoutPrediction";
+import { isKnockoutStage } from "@/lib/teams";
 import { outcomeFromScore } from "@/lib/scoring";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { getPredictionWindowState, kickoffMsFromFixtureRow } from "@/lib/kickoff";
@@ -54,7 +62,7 @@ export async function GET(req: Request) {
   }
   const { data, error } = await supabase
     .from("predictions")
-    .select("winner,home_score,away_score,updated_at")
+    .select("winner,home_score,away_score,et_home_score,et_away_score,penalty_winner,updated_at")
     .eq("user_id", user.id)
     .eq("fixture_id", fixtureId)
     .maybeSingle();
@@ -70,9 +78,12 @@ export async function PUT(req: Request) {
   const body = (await req.json().catch(() => null)) as
     | {
         fixtureId?: string;
-        winner?: "home" | "away" | "draw";
         homeScore?: number;
         awayScore?: number;
+        etWinner?: EtWinnerPick | null;
+        etHomeScore?: number | null;
+        etAwayScore?: number | null;
+        penaltyWinner?: "home" | "away" | null;
       }
     | null;
 
@@ -88,6 +99,29 @@ export async function PUT(req: Request) {
   const away = Math.floor(awayScore);
   const winner = outcomeFromScore(home, away);
 
+  let etHome: number | null = null;
+  let etAway: number | null = null;
+  let penaltyWinner: "home" | "away" | null = null;
+
+  const etWinner = body?.etWinner;
+  if (etWinner === "home" || etWinner === "away" || etWinner === "draw") {
+    const scores = etScoresFromWinner(etWinner);
+    etHome = scores.home;
+    etAway = scores.away;
+  } else if (body?.etHomeScore != null && body?.etAwayScore != null) {
+    etHome = Number(body.etHomeScore);
+    etAway = Number(body.etAwayScore);
+    if (!Number.isFinite(etHome) || !Number.isFinite(etAway) || etHome < 0 || etAway < 0) {
+      return NextResponse.json({ ok: false, message: "Invalid extra time pick" }, { status: 400 });
+    }
+    etHome = Math.floor(etHome);
+    etAway = Math.floor(etAway);
+  }
+
+  if (body?.penaltyWinner === "home" || body?.penaltyWinner === "away") {
+    penaltyWinner = body.penaltyWinner;
+  }
+
   let supabase;
   try {
     supabase = getSupabaseServerClient();
@@ -100,7 +134,7 @@ export async function PUT(req: Request) {
 
   const { data: fixture, error: fixtureErr } = await supabase
     .from("fixtures")
-    .select("status,date_label,time,city,kickoff_at,home,away")
+    .select("status,stage,date_label,time,city,kickoff_at,home,away")
     .eq("id", fixtureId)
     .maybeSingle();
 
@@ -121,6 +155,27 @@ export async function PUT(req: Request) {
     );
   }
 
+  const isKnockout = isKnockoutStage(fixture.stage);
+  const validationEtWinner: EtWinnerPick | null = etWinnerFromScores(etHome, etAway);
+
+  const validationError = validateKnockoutPrediction(isKnockout, {
+    homeScore: home,
+    awayScore: away,
+    etWinner: validationEtWinner,
+    penaltyWinner,
+  });
+  if (validationError) {
+    return NextResponse.json({ ok: false, message: validationError }, { status: 400 });
+  }
+
+  if (!isKnockout || !isDrawScore(home, away)) {
+    etHome = null;
+    etAway = null;
+    penaltyWinner = null;
+  } else if (!isDrawScore(etHome ?? -1, etAway ?? -2)) {
+    penaltyWinner = null;
+  }
+
   const { error } = await supabase.from("predictions").upsert(
     {
       user_id: user.id,
@@ -128,6 +183,9 @@ export async function PUT(req: Request) {
       winner,
       home_score: home,
       away_score: away,
+      et_home_score: etHome,
+      et_away_score: etAway,
+      penalty_winner: penaltyWinner,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id,fixture_id" },
@@ -163,4 +221,3 @@ export async function DELETE(req: Request) {
   if (error) return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
-

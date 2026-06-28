@@ -26,6 +26,9 @@ type FixtureRow = {
   kickoff_at: string | null;
   result_home_score: number | null;
   result_away_score: number | null;
+  result_et_home_score: number | null;
+  result_et_away_score: number | null;
+  result_penalty_winner: "home" | "away" | null;
 };
 
 const PERIOD_FILTERS: { id: FixtureDatePeriod; label: string }[] = [
@@ -55,6 +58,9 @@ function toMatch(r: FixtureRow): FixtureMatch {
     kickoffAt: r.kickoff_at ?? undefined,
     resultHomeScore: r.result_home_score,
     resultAwayScore: r.result_away_score,
+    resultEtHomeScore: r.result_et_home_score,
+    resultEtAwayScore: r.result_et_away_score,
+    resultPenaltyWinner: r.result_penalty_winner,
   };
 }
 

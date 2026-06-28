@@ -14,6 +14,9 @@ export type FixtureMatch = {
   kickoffAt?: string;
   resultHomeScore?: number | null;
   resultAwayScore?: number | null;
+  resultEtHomeScore?: number | null;
+  resultEtAwayScore?: number | null;
+  resultPenaltyWinner?: "home" | "away" | null;
 };
 
 const MONTHS: Record<string, number> = {

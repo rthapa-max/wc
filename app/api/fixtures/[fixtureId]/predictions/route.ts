@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSessionCookieName, verifySession } from "@/lib/auth";
-import { predictionPoints } from "@/lib/scoring";
+import { predictionPoints, predictionPointsLabel } from "@/lib/scoring";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
 async function requireUser() {
@@ -62,7 +62,9 @@ export async function GET(_req: Request, context: RouteContext) {
 
   const { data: fixture, error: fixtureErr } = await supabase
     .from("fixtures")
-    .select("id,home,away,status,result_home_score,result_away_score")
+    .select(
+      "id,home,away,stage,status,result_home_score,result_away_score,result_et_home_score,result_et_away_score,result_penalty_winner",
+    )
     .eq("id", fixtureId)
     .maybeSingle();
 
@@ -79,12 +81,9 @@ export async function GET(_req: Request, context: RouteContext) {
     return NextResponse.json({ ok: false, message: "Final score has not been recorded yet." }, { status: 403 });
   }
 
-  const resultHome = fixture.result_home_score;
-  const resultAway = fixture.result_away_score;
-
   const { data: predictions, error: predictionsErr } = await supabase
     .from("predictions")
-    .select("user_id,winner,home_score,away_score")
+    .select("user_id,winner,home_score,away_score,et_home_score,et_away_score,penalty_winner")
     .eq("fixture_id", fixtureId);
 
   if (predictionsErr) {
@@ -113,7 +112,27 @@ export async function GET(_req: Request, context: RouteContext) {
   const list = rows
     .map((row) => {
       const profile = usersById.get(row.user_id);
-      const points = predictionPoints(row.home_score, row.away_score, resultHome, resultAway);
+      const points = predictionPoints(
+        row.home_score,
+        row.away_score,
+        fixture.result_home_score,
+        fixture.result_away_score,
+        fixture.stage,
+        {
+          predictedEtHome: row.et_home_score,
+          predictedEtAway: row.et_away_score,
+          predictedPenaltyWinner:
+            row.penalty_winner === "home" || row.penalty_winner === "away"
+              ? row.penalty_winner
+              : null,
+          resultEtHome: fixture.result_et_home_score,
+          resultEtAway: fixture.result_et_away_score,
+          resultPenaltyWinner:
+            fixture.result_penalty_winner === "home" || fixture.result_penalty_winner === "away"
+              ? fixture.result_penalty_winner
+              : null,
+        },
+      );
       return {
         userId: row.user_id,
         displayName: profile ? userDisplay(profile) : "Unknown user",
@@ -121,6 +140,7 @@ export async function GET(_req: Request, context: RouteContext) {
         homeScore: row.home_score,
         awayScore: row.away_score,
         points,
+        pointsLabel: predictionPointsLabel(points, fixture.stage),
       };
     })
     .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
@@ -131,8 +151,12 @@ export async function GET(_req: Request, context: RouteContext) {
       id: fixture.id,
       home: fixture.home,
       away: fixture.away,
-      resultHomeScore: resultHome,
-      resultAwayScore: resultAway,
+      stage: fixture.stage,
+      resultHomeScore: fixture.result_home_score,
+      resultAwayScore: fixture.result_away_score,
+      resultEtHomeScore: fixture.result_et_home_score,
+      resultEtAwayScore: fixture.result_et_away_score,
+      resultPenaltyWinner: fixture.result_penalty_winner,
     },
     predictions: list,
   });

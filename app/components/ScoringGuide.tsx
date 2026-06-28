@@ -1,29 +1,47 @@
-const RULES = [
+const GROUP_RULES = [
   {
     points: 3,
-    label: "Exact score or draw",
-    example:
-      "Pick 2-1 and result is 2-1, or pick 0-0 and result is 0-0, or pick 1-1 and result is 1-1.",
+    label: "Exact score",
+    example: "Pick 2-1 and result is 2-1, or pick 1-1 and result is 1-1.",
     tone: "primary" as const,
   },
   {
     points: 2,
     label: "Correct winner",
-    example:
-      "Pick 3-2, result 2-1 (right winner). Pick 0-0, result 1-1 (draw, wrong score). Pick 1-3, result 0-2 (right winner).",
+    example: "Pick 3-2, result 2-1 (right winner). Pick 0-0, result 1-1 (draw, wrong score).",
     tone: "yellow" as const,
   },
   {
     points: 1,
     label: "Participated",
-    example:
-      "Pick 0-0, result 2-0 (wrong outcome). Pick 2-0, result 1-2 (wrong winner and score). Any saved pick on a finished match earns 1 pt.",
+    example: "Any saved pick on a finished match earns 1 pt if the outcome is wrong.",
+    tone: "surface" as const,
+  },
+] as const;
+
+const KNOCKOUT_RULES = [
+  {
+    points: "3",
+    label: "Exact 90 minutes",
+    example: "Correct score after 90 minutes (including a draw).",
+    tone: "primary" as const,
+  },
+  {
+    points: "+1",
+    label: "Extra time",
+    example: "Correct extra time outcome — right winner or another draw to penalties.",
+    tone: "yellow" as const,
+  },
+  {
+    points: "+1",
+    label: "Penalties",
+    example: "Correct penalty shootout winner when extra time is also a draw.",
     tone: "surface" as const,
   },
   {
-    points: 0,
-    label: "No prediction",
-    example: "No pick submitted before predictions closed (1 hour before kickoff).",
+    points: "5",
+    label: "Max total",
+    example: "3 (90 min) + 1 (ET) + 1 (pens) = 5 points if everything is correct.",
     tone: "muted" as const,
   },
 ] as const;
@@ -49,6 +67,50 @@ function InfoIcon() {
   );
 }
 
+function RuleRow({
+  points,
+  label,
+  example,
+  tone,
+}: {
+  points: string;
+  label: string;
+  example: string;
+  tone: keyof typeof badgeClass;
+}) {
+  const tipId = `scoring-tip-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  return (
+    <li className="group relative min-w-0">
+      <button
+        type="button"
+        className="flex w-full min-w-0 items-center gap-1 text-left text-xs text-primary-text"
+        aria-describedby={tipId}
+        title={example}
+      >
+        <span
+          className={`inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 font-semibold text-[10px] tabular-nums ring-1 ${badgeClass[tone]}`}
+        >
+          {points}
+        </span>
+        <span className="truncate font-medium underline decoration-secondary-border decoration-dotted underline-offset-2">
+          {label}
+        </span>
+        <span className="shrink-0 text-tertiary-400">
+          <InfoIcon />
+        </span>
+      </button>
+      <div
+        id={tipId}
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 hidden w-52 rounded-md border border-secondary-border bg-background px-2.5 py-2 text-[11px] leading-snug text-secondary-text shadow-md group-hover:block group-focus-within:block sm:w-56"
+      >
+        <span className="font-medium text-primary-text">Example: </span>
+        {example}
+      </div>
+    </li>
+  );
+}
+
 export function ScoringGuide() {
   return (
     <section
@@ -57,42 +119,39 @@ export function ScoringGuide() {
     >
       <p className="font-semibold text-xs text-primary-dark sm:text-sm">How points work</p>
 
-      <ul className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4 sm:gap-x-4">
-        {RULES.map((rule) => {
-          const tipId = `scoring-tip-${rule.points}`;
-          return (
-            <li key={rule.label} className="group relative min-w-0">
-              <button
-                type="button"
-                className="flex w-full min-w-0 items-center gap-1 text-left text-xs text-primary-text"
-                aria-describedby={tipId}
-                title={rule.example}
-              >
-                <span
-                  className={`inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 font-semibold text-[10px] tabular-nums ring-1 ${badgeClass[rule.tone]}`}
-                >
-                  {rule.points}
-                </span>
-                <span className="truncate font-medium underline decoration-secondary-border decoration-dotted underline-offset-2">
-                  {rule.label}
-                </span>
-                <span className="shrink-0 text-tertiary-400">
-                  <InfoIcon />
-                </span>
-              </button>
+      <div className="mt-2 space-y-3">
+        <div>
+          <p className="text-[11px] font-medium text-secondary-text sm:text-xs">Group stage</p>
+          <ul className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3 sm:gap-x-4">
+            {GROUP_RULES.map((rule) => (
+              <RuleRow
+                key={rule.label}
+                points={String(rule.points)}
+                label={rule.label}
+                example={rule.example}
+                tone={rule.tone}
+              />
+            ))}
+          </ul>
+        </div>
 
-              <div
-                id={tipId}
-                role="tooltip"
-                className="pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 hidden w-52 rounded-md border border-secondary-border bg-background px-2.5 py-2 text-[11px] leading-snug text-secondary-text shadow-md group-hover:block group-focus-within:block sm:w-56"
-              >
-                <span className="font-medium text-primary-text">Example: </span>
-                {rule.example}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+        <div>
+          <p className="text-[11px] font-medium text-secondary-text sm:text-xs">
+            Knockout — 90 min uses 3/2/1, then +1 per correct extra time and penalties
+          </p>
+          <ul className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4 sm:gap-x-4">
+            {KNOCKOUT_RULES.map((rule) => (
+              <RuleRow
+                key={rule.label}
+                points={rule.points}
+                label={rule.label}
+                example={rule.example}
+                tone={rule.tone}
+              />
+            ))}
+          </ul>
+        </div>
+      </div>
     </section>
   );
 }

@@ -1,3 +1,16 @@
+export const KNOCKOUT_STAGES = [
+  "Round of 32",
+  "Round of 16",
+  "Quarter-final",
+  "Semi-final",
+  "Final",
+] as const;
+
+export function isKnockoutStage(stage: string | null | undefined) {
+  if (!stage) return false;
+  return (KNOCKOUT_STAGES as readonly string[]).includes(stage);
+}
+
 /** Knockout / group placeholders in fixture data — not real countries. */
 export function isParticipantTeam(name: string) {
   const t = name.trim();

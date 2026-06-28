@@ -12,6 +12,7 @@ type PredictionRow = {
   homeScore: number;
   awayScore: number;
   points: number;
+  pointsLabel?: string;
 };
 
 function UsersIcon() {
@@ -157,7 +158,7 @@ export function FixturePredictionsButton({
                                   ) : null}
                                 </div>
                                 <div className="mt-1 text-[11px] text-secondary-text">
-                                  {predictionPointsLabel(row.points)}
+                                  {row.pointsLabel ?? predictionPointsLabel(row.points)}
                                 </div>
                               </div>
                               <div className="shrink-0 text-right">

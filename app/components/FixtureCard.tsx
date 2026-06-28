@@ -4,11 +4,21 @@ import { useEffect, useMemo, useState } from "react";
 import type { FixtureMatch } from "@/lib/fixtures";
 import { flagUrlForTeam } from "@/lib/fixtures";
 import {
+  etScoresFromWinner,
+  etWinnerFromScores,
+  formatKnockoutPredictionSummary,
+  isDrawScore,
+  validateKnockoutPrediction,
+  type EtWinnerPick,
+  type SidePick,
+} from "@/lib/knockoutPrediction";
+import {
   formatKickoffLocal,
   getPredictionWindowState,
   kickoffMsFromFixtureRow,
 } from "@/lib/kickoff";
-import { predictionPoints, predictionPointsClass } from "@/lib/scoring";
+import { predictionPoints, predictionPointsClass, predictionPointsLabel } from "@/lib/scoring";
+import { isKnockoutStage } from "@/lib/teams";
 import { useAuth } from "@/app/components/AuthProvider";
 import { FixturePredictionsButton } from "@/app/components/FixturePredictionsButton";
 
@@ -18,6 +28,9 @@ type Prediction = {
   winner: WinnerPick;
   homeScore: number;
   awayScore: number;
+  etHomeScore?: number | null;
+  etAwayScore?: number | null;
+  penaltyWinner?: SidePick | null;
   updatedAt: number;
 };
 
@@ -26,10 +39,20 @@ function predictionKey(matchKey: string) {
 }
 
 function getMatchKey(m: FixtureMatch) {
-  // Must be stable across renders and unique in list.
   return `${m.dateLabel}|${m.time}|${m.home}|${m.away}|${m.stage ?? ""}|${m.group ?? ""}|${
     m.stadium ?? ""
   }`;
+}
+
+function parseScoreInput(raw: string): number {
+  if (raw === "") return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function scoreToInput(value: number | null | undefined) {
+  if (value == null) return "";
+  return value === 0 ? "" : String(value);
 }
 
 function TeamWithFlag({ team, reverse = false }: { team: string; reverse?: boolean }) {
@@ -65,17 +88,39 @@ function winnerLabel(pick: WinnerPick, m: FixtureMatch) {
   return pick === "home" ? m.home : m.away;
 }
 
+function readLocalPrediction(matchKey: string): Prediction | null {
+  try {
+    const raw = localStorage.getItem(predictionKey(matchKey));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Prediction;
+    if (
+      !parsed ||
+      (parsed.winner !== "home" && parsed.winner !== "away" && parsed.winner !== "draw") ||
+      !Number.isFinite(parsed.homeScore) ||
+      !Number.isFinite(parsed.awayScore)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function FixtureCard({ match }: { match: FixtureMatch }) {
   const matchKey = useMemo(() => getMatchKey(match), [match]);
   const fixtureId = match.id ?? matchKey;
   const { user, ready } = useAuth();
+  const isKnockout = isKnockoutStage(match.stage);
 
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [homeScore, setHomeScore] = useState<string>("");
-  const [awayScore, setAwayScore] = useState<string>("");
+  const [homeScore, setHomeScore] = useState("");
+  const [awayScore, setAwayScore] = useState("");
+  const [etWinner, setEtWinner] = useState<EtWinnerPick | null>(null);
+  const [penaltyWinner, setPenaltyWinner] = useState<SidePick | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -86,26 +131,29 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
   function normalizeScoreInput(raw: string) {
     const digitsOnly = raw.replace(/[^\d]/g, "");
     if (digitsOnly.length === 0) return "";
-    // Remove leading zeros (but keep a single "0" if the whole input is zeros)
-    const trimmed = digitsOnly.replace(/^0+(?=\d)/, "");
-    return trimmed;
+    return digitsOnly.replace(/^0+(?=\d)/, "");
+  }
+
+  function applyPredictionToForm(next: Prediction | null) {
+    if (!next) {
+      setHomeScore("");
+      setAwayScore("");
+      setEtWinner(null);
+      setPenaltyWinner(null);
+      return;
+    }
+
+    setHomeScore(scoreToInput(next.homeScore));
+    setAwayScore(scoreToInput(next.awayScore));
+    setEtWinner(etWinnerFromScores(next.etHomeScore, next.etAwayScore));
+    setPenaltyWinner(next.penaltyWinner ?? null);
   }
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(predictionKey(matchKey));
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Prediction;
-      if (
-        parsed &&
-        (parsed.winner === "home" || parsed.winner === "away" || parsed.winner === "draw") &&
-        Number.isFinite(parsed.homeScore) &&
-        Number.isFinite(parsed.awayScore)
-      ) {
-        setPrediction(parsed);
-      }
-    } catch {
-      // ignore
+    const local = readLocalPrediction(matchKey);
+    if (local) {
+      setPrediction(local);
+      applyPredictionToForm(local);
     }
   }, [matchKey]);
 
@@ -122,6 +170,9 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
               winner: "home" | "away" | "draw";
               home_score: number;
               away_score: number;
+              et_home_score: number | null;
+              et_away_score: number | null;
+              penalty_winner: "home" | "away" | null;
               updated_at: string;
             } | null;
           }
@@ -132,8 +183,7 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
 
       if (!json.prediction) {
         setPrediction(null);
-        setHomeScore("");
-        setAwayScore("");
+        applyPredictionToForm(null);
         try {
           localStorage.removeItem(predictionKey(matchKey));
         } catch {
@@ -150,21 +200,23 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
             : "draw",
         homeScore: Number(data.home_score ?? 0),
         awayScore: Number(data.away_score ?? 0),
+        etHomeScore: data.et_home_score ?? null,
+        etAwayScore: data.et_away_score ?? null,
+        penaltyWinner:
+          data.penalty_winner === "home" || data.penalty_winner === "away"
+            ? data.penalty_winner
+            : null,
         updatedAt: new Date(data.updated_at ?? Date.now()).getTime(),
       };
       setPrediction(next);
-      setHomeScore(next.homeScore === 0 ? "" : String(next.homeScore));
-      setAwayScore(next.awayScore === 0 ? "" : String(next.awayScore));
+      applyPredictionToForm(next);
     }
 
     void loadFromDb();
   }, [fixtureId, user, matchKey]);
 
   useEffect(() => {
-    if (!user) {
-      // Logged out: keep local draft empty, but show last local saved prediction if present.
-      setServerError(null);
-    }
+    if (!user) setServerError(null);
   }, [user]);
 
   const kickoffMs = useMemo(() => {
@@ -182,11 +234,81 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
     [kickoffMs, match.time],
   );
 
+  const parsedHome = parseScoreInput(homeScore);
+  const parsedAway = parseScoreInput(awayScore);
+  const scoresEntered = homeScore !== "" && awayScore !== "";
+  const hasValid90 =
+    Number.isFinite(parsedHome) && Number.isFinite(parsedAway) && parsedHome >= 0 && parsedAway >= 0;
+  const isDraw90 = scoresEntered && hasValid90 && isDrawScore(parsedHome, parsedAway);
+
+  useEffect(() => {
+    if (!isKnockout || !isDraw90) {
+      setEtWinner(null);
+      setPenaltyWinner(null);
+      return;
+    }
+    if (etWinner !== "draw") {
+      setPenaltyWinner(null);
+    }
+  }, [isDraw90, etWinner, isKnockout]);
+
+  function buildKnockoutFields(home: number, away: number): {
+    etWinner: EtWinnerPick | null;
+    etHomeScore: number | null;
+    etAwayScore: number | null;
+    penaltyWinner: SidePick | null;
+  } {
+    if (!isKnockout || !isDrawScore(home, away)) {
+      return { etWinner: null, etHomeScore: null, etAwayScore: null, penaltyWinner: null };
+    }
+
+    const pick = etWinner;
+    if (pick !== "home" && pick !== "away" && pick !== "draw") {
+      return { etWinner: null, etHomeScore: null, etAwayScore: null, penaltyWinner: null };
+    }
+
+    const scores = etScoresFromWinner(pick);
+    return {
+      etWinner: pick,
+      etHomeScore: scores.home,
+      etAwayScore: scores.away,
+      penaltyWinner: pick === "draw" ? penaltyWinner : null,
+    };
+  }
+
+  function predictionSummary(next: Prediction) {
+    if (!isKnockout) {
+      return `${next.homeScore}-${next.awayScore}`;
+    }
+    return formatKnockoutPredictionSummary(
+      {
+        homeScore: next.homeScore,
+        awayScore: next.awayScore,
+        etWinner: etWinnerFromScores(next.etHomeScore, next.etAwayScore),
+        penaltyWinner: next.penaltyWinner ?? null,
+      },
+      match.home,
+      match.away,
+    );
+  }
+
   async function save() {
     if (!user || !isPending || !predictionWindow.open) return;
     const hs = homeScore === "" ? 0 : Number(homeScore);
     const as = awayScore === "" ? 0 : Number(awayScore);
     if (!Number.isFinite(hs) || !Number.isFinite(as) || hs < 0 || as < 0) return;
+
+    const knockoutFields = buildKnockoutFields(Math.floor(hs), Math.floor(as));
+    const validationError = validateKnockoutPrediction(isKnockout, {
+      homeScore: Math.floor(hs),
+      awayScore: Math.floor(as),
+      etWinner: knockoutFields.etWinner,
+      penaltyWinner: knockoutFields.penaltyWinner,
+    });
+    if (validationError) {
+      setServerError(validationError);
+      return;
+    }
 
     setServerError(null);
     setSaving(true);
@@ -196,6 +318,9 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
       winner: derivedWinner,
       homeScore: Math.floor(hs),
       awayScore: Math.floor(as),
+      etHomeScore: knockoutFields.etHomeScore,
+      etAwayScore: knockoutFields.etAwayScore,
+      penaltyWinner: knockoutFields.penaltyWinner,
       updatedAt: Date.now(),
     };
 
@@ -210,9 +335,10 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         fixtureId,
-        winner: next.winner,
         homeScore: next.homeScore,
         awayScore: next.awayScore,
+        etWinner: knockoutFields.etWinner,
+        penaltyWinner: knockoutFields.penaltyWinner,
       }),
     }).catch(() => null);
 
@@ -228,38 +354,6 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
     }
 
     setPrediction(next);
-    window.dispatchEvent(new Event("wc:predictions-changed"));
-    setSaving(false);
-  }
-
-  async function clear() {
-    setServerError(null);
-    try {
-      localStorage.removeItem(predictionKey(matchKey));
-    } catch {
-      // ignore
-    }
-    if (!user) return;
-
-    setSaving(true);
-    const res = await fetch(`/api/predictions?fixtureId=${encodeURIComponent(fixtureId)}`, {
-      method: "DELETE",
-    }).catch(() => null);
-
-    const json = (await res?.json().catch(() => null)) as
-      | { ok: true }
-      | { ok: false; message: string }
-      | null;
-
-    if (!res || !json || !json.ok) {
-      setServerError(json && "message" in json ? json.message : "Failed to delete on server.");
-      setSaving(false);
-      return;
-    }
-
-    setPrediction(null);
-    setHomeScore("");
-    setAwayScore("");
     window.dispatchEvent(new Event("wc:predictions-changed"));
     setSaving(false);
   }
@@ -283,11 +377,40 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
       prediction.awayScore,
       match.resultHomeScore!,
       match.resultAwayScore!,
+      match.stage,
+      {
+        predictedEtHome: prediction.etHomeScore ?? null,
+        predictedEtAway: prediction.etAwayScore ?? null,
+        predictedPenaltyWinner: prediction.penaltyWinner ?? null,
+        resultEtHome: match.resultEtHomeScore ?? null,
+        resultEtAway: match.resultEtAwayScore ?? null,
+        resultPenaltyWinner: match.resultPenaltyWinner ?? null,
+      },
     );
-  }, [hasResult, prediction, match.resultHomeScore, match.resultAwayScore]);
+  }, [
+    hasResult,
+    prediction,
+    match.resultHomeScore,
+    match.resultAwayScore,
+    match.resultEtHomeScore,
+    match.resultEtAwayScore,
+    match.resultPenaltyWinner,
+    match.stage,
+  ]);
+
+  const scoreInputClass =
+    "h-10 w-14 rounded-lg border border-secondary-border bg-background px-1 text-center text-sm tabular-nums outline-none focus:border-secondary-300 focus:ring-2 focus:ring-primary-500/30 disabled:opacity-60";
 
   return (
     <div className="relative rounded-2xl border border-secondary-border bg-background p-5 shadow-sm sm:p-6">
+      {isKnockout && match.stage ? (
+        <div className="mb-3 flex justify-center sm:mb-4">
+          <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-700 ring-1 ring-primary-200 sm:text-[11px]">
+            {match.stage}
+          </span>
+        </div>
+      ) : null}
+
       {hasResult ? (
         <div className="absolute left-4 top-4 sm:left-5 sm:top-5">
           <FixturePredictionsButton
@@ -296,6 +419,7 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
           />
         </div>
       ) : null}
+
       <div className="flex flex-col gap-5 sm:gap-6">
         <div className="flex flex-col items-center gap-4 sm:gap-5">
           <div className="flex items-center justify-center gap-8 sm:gap-12">
@@ -323,14 +447,17 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
                 Final score
               </p>
               {prediction ? (
-                <p className="text-sm text-tertiary-700">
+                <p className="max-w-sm text-center text-sm text-tertiary-700">
                   Your prediction:{" "}
                   <span className="rounded-md bg-primary-50 px-1.5 py-0.5 font-semibold tabular-nums text-primary-700">
-                    {prediction.homeScore}-{prediction.awayScore}
+                    {predictionSummary(prediction)}
                   </span>
                   {earnedPoints != null ? (
                     <span className={`ml-1.5 ${predictionPointsClass(earnedPoints)}`}>
                       {earnedPoints} {earnedPoints === 1 ? "point" : "points"}
+                      <span className="ml-1 font-normal text-secondary-text">
+                        ({predictionPointsLabel(earnedPoints, match.stage)})
+                      </span>
                     </span>
                   ) : null}
                 </p>
@@ -342,32 +469,120 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
               )}
             </div>
           ) : (
-            <div className="flex items-center justify-center gap-4">
-              <input
-                inputMode="numeric"
-                value={homeScore}
-                onChange={(e) => setHomeScore(normalizeScoreInput(e.target.value))}
-                disabled={!canPredict}
-                className="h-10 w-14 rounded-lg border border-secondary-border bg-background px-1 text-center text-sm tabular-nums outline-none focus:border-secondary-300 focus:ring-2 focus:ring-primary-500/30 disabled:opacity-60"
-                placeholder="0"
-                aria-label={`${match.home} score`}
-              />
-              <span className="text-sm font-medium text-gray-300">vs</span>
-              <input
-                inputMode="numeric"
-                value={awayScore}
-                onChange={(e) => setAwayScore(normalizeScoreInput(e.target.value))}
-                disabled={!canPredict}
-                className="h-10 w-14 rounded-lg border border-secondary-border bg-background px-1 text-center text-sm tabular-nums outline-none focus:border-secondary-300 focus:ring-2 focus:ring-primary-500/30 disabled:opacity-60"
-                placeholder="0"
-                aria-label={`${match.away} score`}
-              />
+            <div className="flex w-full max-w-xs flex-col items-center gap-4">
+              <div className="flex w-full flex-col items-center gap-2">
+                {isKnockout ? (
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-secondary-text">
+                    90 minutes
+                  </p>
+                ) : null}
+                <div className="flex items-center justify-center gap-4">
+                  <input
+                    inputMode="numeric"
+                    value={homeScore}
+                    onChange={(e) => setHomeScore(normalizeScoreInput(e.target.value))}
+                    disabled={!canPredict}
+                    className={scoreInputClass}
+                    placeholder="0"
+                    aria-label={`${match.home} score after 90 minutes`}
+                  />
+                  <span className="text-sm font-medium text-gray-300">vs</span>
+                  <input
+                    inputMode="numeric"
+                    value={awayScore}
+                    onChange={(e) => setAwayScore(normalizeScoreInput(e.target.value))}
+                    disabled={!canPredict}
+                    className={scoreInputClass}
+                    placeholder="0"
+                    aria-label={`${match.away} score after 90 minutes`}
+                  />
+                </div>
+              </div>
+
+              {isKnockout && isDraw90 ? (
+                <div className="w-full rounded-xl border border-primary-100 bg-primary-50/40 px-3 py-3">
+                  <p className="text-center text-[11px] font-medium uppercase tracking-wide text-primary-700">
+                    Extra time — pick a winner or draw
+                  </p>
+                  <div className="mt-2 flex flex-wrap justify-center gap-2">
+                    <button
+                      type="button"
+                      disabled={!canPredict}
+                      onClick={() => setEtWinner("home")}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                        etWinner === "home"
+                          ? "bg-primary-600 text-primary-foreground"
+                          : "border border-secondary-border bg-background text-primary-text hover:bg-secondary-50"
+                      }`}
+                    >
+                      {match.home}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canPredict}
+                      onClick={() => setEtWinner("draw")}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                        etWinner === "draw"
+                          ? "bg-primary-600 text-primary-foreground"
+                          : "border border-secondary-border bg-background text-primary-text hover:bg-secondary-50"
+                      }`}
+                    >
+                      Draw
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canPredict}
+                      onClick={() => setEtWinner("away")}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                        etWinner === "away"
+                          ? "bg-primary-600 text-primary-foreground"
+                          : "border border-secondary-border bg-background text-primary-text hover:bg-secondary-50"
+                      }`}
+                    >
+                      {match.away}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {isKnockout && isDraw90 && etWinner === "draw" ? (
+                <div className="w-full rounded-xl border border-secondary-border bg-surface-blue-50 px-3 py-3">
+                  <p className="text-center text-[11px] font-medium text-primary-text">
+                    Penalties — pick a winner
+                  </p>
+                  <div className="mt-2 flex flex-wrap justify-center gap-2">
+                    <button
+                      type="button"
+                      disabled={!canPredict}
+                      onClick={() => setPenaltyWinner("home")}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                        penaltyWinner === "home"
+                          ? "bg-primary-600 text-primary-foreground"
+                          : "border border-secondary-border bg-background text-primary-text hover:bg-secondary-50"
+                      }`}
+                    >
+                      {match.home}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canPredict}
+                      onClick={() => setPenaltyWinner("away")}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                        penaltyWinner === "away"
+                          ? "bg-primary-600 text-primary-foreground"
+                          : "border border-secondary-border bg-background text-primary-text hover:bg-secondary-50"
+                      }`}
+                    >
+                      {match.away}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
 
         <div className="min-w-0">
-
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-secondary-text">
             <span
               className={
@@ -381,22 +596,17 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
               {fixtureStatus}
             </span>
             {match.kickoffAt ? (
-              <time
-                dateTime={match.kickoffAt}
-                className="font-normal text-primary-text"
-              >
+              <time dateTime={match.kickoffAt} className="font-normal text-primary-text">
                 {kickoffTimeLabel}
               </time>
             ) : (
               <span className="font-normal text-primary-text">{kickoffTimeLabel}</span>
             )}
-            {match.stage ? <span>{match.stage}</span> : null}
+            {!isKnockout && match.stage ? <span>{match.stage}</span> : null}
             {match.group ? <span>{match.group}</span> : null}
           </div>
 
-          {location ? (
-            <div className="mt-2 text-xs text-secondary-text">{location}</div>
-          ) : null}
+          {location ? <div className="mt-2 text-xs text-secondary-text">{location}</div> : null}
 
           {isPending && !predictionWindow.open && predictionWindow.reason ? (
             <div className="mt-2 text-xs text-secondary-text">{predictionWindow.reason}</div>
@@ -405,9 +615,7 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
           {prediction && !isFinished ? (
             <div className="mt-2 text-xs text-tertiary-700">
               Predicted:{" "}
-              <span className="font-normal text-primary-text">
-                {winnerLabel(prediction.winner, match)} {prediction.homeScore}-{prediction.awayScore}
-              </span>
+              <span className="font-normal text-primary-text">{predictionSummary(prediction)}</span>
             </div>
           ) : null}
 
@@ -435,8 +643,6 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
           )}
         </div>
       </div>
-
     </div>
   );
 }
-
