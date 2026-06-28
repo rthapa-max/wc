@@ -3,18 +3,23 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/app/components/AuthProvider";
+import { formatKnockoutExtrasLine } from "@/lib/knockoutPrediction";
 
 type Row = {
   fixture_id: string;
   winner: "home" | "away" | "draw";
   home_score: number;
   away_score: number;
+  et_home_score: number | null;
+  et_away_score: number | null;
+  penalty_winner: "home" | "away" | null;
   updated_at: string;
   fixtures?: {
     home: string;
     away: string;
     date_label: string;
     time: string;
+    stage?: string | null;
   } | null;
 };
 
@@ -140,13 +145,26 @@ export function PredictionHistoryButton() {
                     </p>
                   ) : (
                     <ul className="space-y-2">
-                      {rows.map((row) => (
+                      {rows.map((row) => {
+                        const home = row.fixtures?.home ?? "Home";
+                        const away = row.fixtures?.away ?? "Away";
+                        const knockoutExtras = formatKnockoutExtrasLine(
+                          row.home_score,
+                          row.away_score,
+                          row.et_home_score,
+                          row.et_away_score,
+                          row.penalty_winner,
+                          home,
+                          away,
+                        );
+
+                        return (
                         <li
                           key={row.fixture_id}
                           className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-white/5"
                         >
                           <div className="truncate text-xs font-medium text-zinc-900 dark:text-zinc-50">
-                            {(row.fixtures?.home ?? "Home") + " vs " + (row.fixtures?.away ?? "Away")}
+                            {home + " vs " + away}
                           </div>
                           <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                             {row.fixtures?.date_label}
@@ -165,8 +183,14 @@ export function PredictionHistoryButton() {
                               </span>
                             </span>
                           </div>
+                          {knockoutExtras ? (
+                            <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                              {knockoutExtras}
+                            </div>
+                          ) : null}
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </div>

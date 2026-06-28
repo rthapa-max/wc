@@ -81,3 +81,62 @@ export function formatKnockoutPredictionSummary(
 
   return `${base} · ${etLabel}`;
 }
+
+export type KnockoutExtrasLabels = {
+  et: string | null;
+  penalties: string | null;
+};
+
+export function knockoutExtrasLabels(
+  homeScore: number,
+  awayScore: number,
+  etHome: number | null | undefined,
+  etAway: number | null | undefined,
+  penaltyWinner: SidePick | null | undefined,
+  homeTeam: string,
+  awayTeam: string,
+): KnockoutExtrasLabels {
+  if (!isDrawScore(homeScore, awayScore)) {
+    return { et: null, penalties: null };
+  }
+
+  const etWinner = etWinnerFromScores(etHome, etAway);
+  if (etWinner !== "home" && etWinner !== "away" && etWinner !== "draw") {
+    return { et: null, penalties: null };
+  }
+
+  const et =
+    etWinner === "draw" ? "Draw" : etWinner === "home" ? homeTeam : awayTeam;
+
+  const penalties =
+    etWinner === "draw" && (penaltyWinner === "home" || penaltyWinner === "away")
+      ? penaltyWinner === "home"
+        ? homeTeam
+        : awayTeam
+      : null;
+
+  return { et, penalties };
+}
+
+export function formatKnockoutExtrasLine(
+  homeScore: number,
+  awayScore: number,
+  etHome: number | null | undefined,
+  etAway: number | null | undefined,
+  penaltyWinner: SidePick | null | undefined,
+  homeTeam: string,
+  awayTeam: string,
+): string | null {
+  const { et, penalties } = knockoutExtrasLabels(
+    homeScore,
+    awayScore,
+    etHome,
+    etAway,
+    penaltyWinner,
+    homeTeam,
+    awayTeam,
+  );
+  if (!et) return null;
+  if (penalties) return `ET: ${et} · Pens: ${penalties}`;
+  return `ET: ${et}`;
+}

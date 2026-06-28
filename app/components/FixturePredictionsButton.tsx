@@ -11,6 +11,7 @@ type PredictionRow = {
   winner: "home" | "away" | "draw";
   homeScore: number;
   awayScore: number;
+  knockoutExtras: string | null;
   points: number;
   pointsLabel?: string;
 };
@@ -165,6 +166,11 @@ export function FixturePredictionsButton({
                                 <div className="text-sm font-semibold tabular-nums text-primary-text">
                                   {row.homeScore}-{row.awayScore}
                                 </div>
+                                {row.knockoutExtras ? (
+                                  <div className="mt-0.5 max-w-[10rem] text-[10px] leading-snug text-secondary-text">
+                                    {row.knockoutExtras}
+                                  </div>
+                                ) : null}
                                 <div className="mt-0.5 text-[11px] font-medium text-primary-600">
                                   {row.points} {row.points === 1 ? "pt" : "pts"}
                                 </div>

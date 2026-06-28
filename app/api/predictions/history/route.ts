@@ -48,7 +48,9 @@ export async function GET() {
   }
   const { data, error } = await supabase
     .from("predictions")
-    .select("fixture_id,winner,home_score,away_score,updated_at,fixtures:fixture_id(home,away,date_label,time)")
+    .select(
+      "fixture_id,winner,home_score,away_score,et_home_score,et_away_score,penalty_winner,updated_at,fixtures:fixture_id(home,away,date_label,time,stage)",
+    )
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .limit(200);

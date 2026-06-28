@@ -48,6 +48,8 @@ export type PredictionWindowClosedPayload = {
     homeScore: number;
     awayScore: number;
     winner: string;
+    extraTime: string | null;
+    penalties: string | null;
   }[];
 };
 
@@ -68,7 +70,7 @@ function buildPredictionWindowClosedHtml(payload: PredictionWindowClosedPayload)
 
   const rows =
     payload.predictions.length === 0
-      ? "<tr><td colspan='3'>No predictions submitted.</td></tr>"
+      ? "<tr><td colspan='5'>No predictions submitted.</td></tr>"
       : payload.predictions
           .map(
             (p) => `
@@ -76,6 +78,8 @@ function buildPredictionWindowClosedHtml(payload: PredictionWindowClosedPayload)
         <td>${p.userDisplay}</td>
         <td>${p.homeScore} – ${p.awayScore}</td>
         <td>${p.winner}</td>
+        <td>${p.extraTime ?? "—"}</td>
+        <td>${p.penalties ?? "—"}</td>
       </tr>`,
           )
           .join("");
@@ -91,7 +95,7 @@ function buildPredictionWindowClosedHtml(payload: PredictionWindowClosedPayload)
     </table>
     <table cellpadding="6" cellspacing="0" style="border-collapse:collapse" border="1">
       <thead>
-        <tr><th>User</th><th>Score</th><th>Winner</th></tr>
+        <tr><th>User</th><th>Score (90 min)</th><th>Winner</th><th>Extra time</th><th>Penalties</th></tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>

@@ -1,3 +1,4 @@
+import { knockoutExtrasLabels } from "@/lib/knockoutPrediction";
 import { PREDICTION_CLOSES_BEFORE_MS } from "@/lib/kickoff";
 import { sendPredictionWindowClosedEmail } from "@/lib/resend";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
@@ -16,6 +17,9 @@ type FixtureRow = {
 type PredictionRow = {
   home_score: number;
   away_score: number;
+  et_home_score: number | null;
+  et_away_score: number | null;
+  penalty_winner: "home" | "away" | null;
   winner: "home" | "away" | "draw";
   user_id: string;
 };
@@ -94,7 +98,7 @@ export async function processPredictionWindowClosures(nowMs = Date.now()) {
 
     const { data: predictions, error: predErr } = await supabase
       .from("predictions")
-      .select("home_score,away_score,winner,user_id")
+      .select("home_score,away_score,et_home_score,et_away_score,penalty_winner,winner,user_id")
       .eq("fixture_id", fixture.id);
 
     if (predErr) {
@@ -140,11 +144,24 @@ export async function processPredictionWindowClosures(nowMs = Date.now()) {
         closedAt: new Date(closesAt).toISOString(),
         predictions: predRows.map((p) => {
           const user = usersById.get(p.user_id);
+          const { et, penalties } = knockoutExtrasLabels(
+            p.home_score,
+            p.away_score,
+            p.et_home_score,
+            p.et_away_score,
+            p.penalty_winner === "home" || p.penalty_winner === "away"
+              ? p.penalty_winner
+              : null,
+            fixture.home,
+            fixture.away,
+          );
           return {
             userDisplay: user ? userDisplay(user) : "Unknown user",
             homeScore: p.home_score,
             awayScore: p.away_score,
             winner: winnerLabel(fixture.home, fixture.away, p.winner),
+            extraTime: et,
+            penalties,
           };
         }),
       });

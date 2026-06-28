@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSessionCookieName, verifySession } from "@/lib/auth";
+import { formatKnockoutExtrasLine } from "@/lib/knockoutPrediction";
 import { predictionPoints, predictionPointsLabel } from "@/lib/scoring";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
@@ -133,12 +134,25 @@ export async function GET(_req: Request, context: RouteContext) {
               : null,
         },
       );
+      const knockoutExtras = formatKnockoutExtrasLine(
+        row.home_score,
+        row.away_score,
+        row.et_home_score,
+        row.et_away_score,
+        row.penalty_winner === "home" || row.penalty_winner === "away"
+          ? row.penalty_winner
+          : null,
+        fixture.home,
+        fixture.away,
+      );
+
       return {
         userId: row.user_id,
         displayName: profile ? userDisplay(profile) : "Unknown user",
         winner: row.winner,
         homeScore: row.home_score,
         awayScore: row.away_score,
+        knockoutExtras,
         points,
         pointsLabel: predictionPointsLabel(points, fixture.stage),
       };
