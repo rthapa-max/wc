@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/app/components/AuthProvider";
 import { flagUrlForTeam } from "@/lib/fixtures";
 
 type LeaderRow = {
@@ -46,8 +47,14 @@ function LeaderCrown() {
 }
 
 export function LeaderboardTable() {
+  const { user, ready: authReady } = useAuth();
   const [rows, setRows] = useState<LeaderRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+  function isCurrentUser(row: LeaderRow) {
+    if (!user?.email || !row.email) return false;
+    return user.email.toLowerCase() === row.email.toLowerCase();
+  }
 
   useEffect(() => {
     async function load() {
@@ -77,7 +84,12 @@ export function LeaderboardTable() {
   return (
     <section className="overflow-hidden rounded-2xl border border-secondary-border bg-background shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-secondary-border px-5 py-4 sm:px-6">
-        <h2 className="font-semibold text-base text-primary-text">Leaderboard</h2>
+        <div>
+          <h2 className="font-semibold text-base text-primary-text">Leaderboard</h2>
+          {authReady && user ? (
+            <p className="mt-0.5 text-xs text-secondary-text">Your row is highlighted</p>
+          ) : null}
+        </div>
         <span className="text-sm text-secondary-text">
           {loading ? "Loading…" : `${rows.length} player${rows.length === 1 ? "" : "s"}`}
         </span>
@@ -103,13 +115,19 @@ export function LeaderboardTable() {
               <tbody className="divide-y divide-secondary-75 text-primary-text">
                 {rows.map((row, index) => {
                   const isLeader = index === 0;
+                  const isYou = isCurrentUser(row);
                   return (
                     <tr
                       key={row.email}
+                      aria-current={isYou ? "true" : undefined}
                       className={
-                        isLeader
-                          ? "bg-gradient-to-r from-yellow-300/50 via-primary-50 to-surface-blue-50"
-                          : "hover:bg-secondary-50"
+                        isYou && isLeader
+                          ? "bg-linear-to-r from-yellow-300/50 via-primary-100 to-primary-50 ring-2 ring-inset ring-primary-500"
+                          : isYou
+                            ? "bg-primary-50 ring-2 ring-inset ring-primary-400"
+                            : isLeader
+                              ? "bg-linear-to-r from-yellow-300/50 via-primary-50 to-surface-blue-50"
+                              : "hover:bg-secondary-50"
                       }
                     >
                       <td className="py-3.5 pl-4 pr-4 sm:pl-6">
@@ -119,18 +137,32 @@ export function LeaderboardTable() {
                             1
                           </span>
                         ) : (
-                          <span className="tabular-nums text-gray-400">{index + 1}</span>
+                          <span
+                            className={`tabular-nums ${isYou ? "font-semibold text-primary-700" : "text-gray-400"}`}
+                          >
+                            {index + 1}
+                          </span>
                         )}
                       </td>
                       <td className="max-w-[14rem] py-3.5 pr-4" title={row.email}>
                         <span className="inline-flex min-w-0 items-center gap-2">
                           <span
-                            className={`truncate ${isLeader ? "font-semibold text-primary-dark" : ""}`}
+                            className={`truncate ${
+                              isLeader || isYou ? "font-semibold text-primary-dark" : ""
+                            }`}
                           >
                             {displayName(row)}
+                            {isYou ? (
+                              <span className="sr-only"> (your row)</span>
+                            ) : null}
                           </span>
-                          {isLeader ? (
+                          {isYou ? (
                             <span className="shrink-0 rounded-full bg-primary-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
+                              You
+                            </span>
+                          ) : null}
+                          {isLeader ? (
+                            <span className="shrink-0 rounded-full bg-yellow-300 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-brown-500">
                               Leader
                             </span>
                           ) : null}
@@ -139,7 +171,7 @@ export function LeaderboardTable() {
                       </td>
                       <td
                         className={`py-3.5 pl-4 pr-4 text-right tabular-nums sm:pr-6 ${
-                          isLeader
+                          isLeader || isYou
                             ? "font-semibold text-primary-700"
                             : "font-semibold text-primary-text"
                         }`}
