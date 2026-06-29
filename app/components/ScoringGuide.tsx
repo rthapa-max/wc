@@ -35,7 +35,7 @@ const KNOCKOUT_V2_RULES = [
   {
     points: "+3",
     label: "Exact penalties",
-    example: "When the match is a draw after full-time, exact penalty score (e.g. 5-4).",
+    example: "Only if you predicted a draw at full-time — exact shootout score (e.g. 5-4).",
     tone: "surface" as const,
   },
   {
@@ -43,6 +43,13 @@ const KNOCKOUT_V2_RULES = [
     label: "Penalty winner",
     example: "Correct penalty winner but wrong shootout score (e.g. pick 5-4, result 4-3).",
     tone: "muted" as const,
+  },
+  {
+    points: "0",
+    label: "Wrong outcome",
+    example:
+      "Pick 3-2 but full-time ends 2-2 — 0 pts even if penalties are correct. Penalties only count when you predicted a draw.",
+    tone: "surface" as const,
   },
 ] as const;
 
@@ -139,7 +146,7 @@ export function ScoringGuide() {
           <p className="text-[11px] font-medium text-secondary-text sm:text-xs">
             Knockout — 5/3/0 after full-time, plus up to 3 penalty points (no participation pts)
           </p>
-          <ul className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4 sm:gap-x-4">
+          <ul className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-5 sm:gap-x-4">
             {KNOCKOUT_V2_RULES.map((rule) => (
               <RuleRow
                 key={rule.label}

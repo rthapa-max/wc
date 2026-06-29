@@ -297,6 +297,7 @@ begin
     return v_points;
   end if;
 
+  -- Knockout v2: wrong full-time outcome = 0 (e.g. predict 3-2, actual 2-2 — no penalty points).
   if p_result_home = p_pred_home and p_result_away = p_pred_away then
     v_points := 5;
   elsif (

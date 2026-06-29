@@ -122,6 +122,7 @@ begin
   end if;
 
   -- Knockout v2: 5/3/0 regular time, no participation points.
+  -- Wrong outcome = 0 (e.g. predict 3-2, actual 2-2 — no penalty points even if shootout winner is correct).
   if p_result_home = p_pred_home and p_result_away = p_pred_away then
     v_points := 5;
   elsif (

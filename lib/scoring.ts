@@ -118,6 +118,7 @@ function computeKnockoutV2Points(input: PredictionScoreInput): number {
     resultPenaltyAway = null,
   } = input;
 
+  // Full-time outcome first. Wrong outcome = 0 (e.g. predict 3-2, actual 2-2 → no points at all).
   let points: number;
   if (resultHome === predictedHome && resultAway === predictedAway) {
     points = 5;
@@ -127,10 +128,12 @@ function computeKnockoutV2Points(input: PredictionScoreInput): number {
     return 0;
   }
 
+  // Decided in full-time — no penalty scoring.
   if (resultHome !== resultAway) {
     return points;
   }
 
+  // Penalties only when the user predicted a draw at full-time (not e.g. 3-2 when actual was 2-2).
   if (!isDrawScore(predictedHome, predictedAway)) {
     return points;
   }
