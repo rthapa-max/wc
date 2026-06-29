@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/components/AuthProvider";
 import { compareByDateAndTime } from "@/lib/fixtures";
-import { isDrawScore } from "@/lib/knockoutPrediction";
+import { isDrawScore, formatPenaltyShootoutResult } from "@/lib/knockoutPrediction";
+import { usesLegacyKnockoutScoring } from "@/lib/knockoutScoring";
 import { isKnockoutStage } from "@/lib/teams";
 
 type FixtureRow = {
@@ -19,6 +20,9 @@ type FixtureRow = {
   result_et_home_score: number | null;
   result_et_away_score: number | null;
   result_penalty_winner: "home" | "away" | null;
+  result_penalty_home_score: number | null;
+  result_penalty_away_score: number | null;
+  knockout_scoring_version: "legacy" | "v2" | null;
 };
 
 function normalizeScore(raw: string) {
@@ -53,10 +57,13 @@ function AdminResultRow({
     etHs: string;
     etAs: string;
     penaltyWinner: "home" | "away" | null;
+    penaltyHs: string;
+    penaltyAs: string;
   }) => void;
 }) {
   const isFinished = row.status === "finished";
   const isKnockout = isKnockoutStage(row.stage);
+  const legacyKnockoutScoring = usesLegacyKnockoutScoring(row.knockout_scoring_version);
   const canEditTeams = isKnockout && !isFinished;
   const [hs, setHs] = useState(row.result_home_score === null ? "" : String(row.result_home_score));
   const [as, setAs] = useState(row.result_away_score === null ? "" : String(row.result_away_score));
@@ -68,6 +75,12 @@ function AdminResultRow({
   );
   const [penaltyWinner, setPenaltyWinner] = useState<"home" | "away" | null>(
     row.result_penalty_winner ?? null,
+  );
+  const [penaltyHs, setPenaltyHs] = useState(
+    row.result_penalty_home_score === null ? "" : String(row.result_penalty_home_score),
+  );
+  const [penaltyAs, setPenaltyAs] = useState(
+    row.result_penalty_away_score === null ? "" : String(row.result_penalty_away_score),
   );
   const [homeTeam, setHomeTeam] = useState(row.home);
   const [awayTeam, setAwayTeam] = useState(row.away);
@@ -81,6 +94,8 @@ function AdminResultRow({
     setEtHs(row.result_et_home_score === null ? "" : String(row.result_et_home_score));
     setEtAs(row.result_et_away_score === null ? "" : String(row.result_et_away_score));
     setPenaltyWinner(row.result_penalty_winner ?? null);
+    setPenaltyHs(row.result_penalty_home_score === null ? "" : String(row.result_penalty_home_score));
+    setPenaltyAs(row.result_penalty_away_score === null ? "" : String(row.result_penalty_away_score));
     setHomeTeam(row.home);
     setAwayTeam(row.away);
     setStatus(row.status === "pending" ? "pending" : "scheduled");
@@ -93,6 +108,8 @@ function AdminResultRow({
     row.result_et_home_score,
     row.result_home_score,
     row.result_penalty_winner,
+    row.result_penalty_home_score,
+    row.result_penalty_away_score,
     row.status,
   ]);
 
@@ -100,6 +117,10 @@ function AdminResultRow({
   const savedHs = row.result_home_score === null ? "" : String(row.result_home_score);
   const savedAs = row.result_away_score === null ? "" : String(row.result_away_score);
   const savedEtHs = row.result_et_home_score === null ? "" : String(row.result_et_home_score);
+  const savedPenaltyHs =
+    row.result_penalty_home_score === null ? "" : String(row.result_penalty_home_score);
+  const savedPenaltyAs =
+    row.result_penalty_away_score === null ? "" : String(row.result_penalty_away_score);
   const savedEtAs = row.result_et_away_score === null ? "" : String(row.result_et_away_score);
   const parsedHs = parseScoreInput(hs);
   const parsedAs = parseScoreInput(as);
@@ -119,12 +140,26 @@ function AdminResultRow({
     Number.isFinite(parsedEtHs) &&
     Number.isFinite(parsedEtAs) &&
     isDrawScore(parsedEtHs, parsedEtAs);
+  const parsedPenHs = penaltyHs === "" ? null : parseScoreInput(penaltyHs);
+  const parsedPenAs = penaltyAs === "" ? null : parseScoreInput(penaltyAs);
+  const penaltyBothEntered =
+    parsedPenHs != null &&
+    parsedPenAs != null &&
+    Number.isFinite(parsedPenHs) &&
+    Number.isFinite(parsedPenAs);
+  const penaltyTied = penaltyBothEntered && parsedPenHs === parsedPenAs;
+  const penaltyPreview =
+    penaltyBothEntered && !penaltyTied
+      ? formatPenaltyShootoutResult(row.home, row.away, parsedPenHs, parsedPenAs)
+      : null;
   const scoreDirty =
     hs !== savedHs ||
     as !== savedAs ||
     etHs !== savedEtHs ||
     etAs !== savedEtAs ||
-    penaltyWinner !== row.result_penalty_winner;
+    penaltyWinner !== row.result_penalty_winner ||
+    penaltyHs !== savedPenaltyHs ||
+    penaltyAs !== savedPenaltyAs;
   const listIdHome = `admin-home-${row.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   const listIdAway = `admin-away-${row.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
@@ -209,7 +244,9 @@ function AdminResultRow({
       </td>
       <td className="px-4 py-2">
         <div className="space-y-2">
-          <p className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">90 min</p>
+          <p className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+            {isKnockout && !legacyKnockoutScoring ? "Full-time" : "full-time"}
+          </p>
           <div className="grid grid-cols-[90px_20px_90px] items-center gap-2">
             <input
               value={hs}
@@ -228,7 +265,7 @@ function AdminResultRow({
             />
           </div>
 
-          {isKnockout && isDraw90 ? (
+          {isKnockout && isDraw90 && legacyKnockoutScoring ? (
             <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 dark:border-white/10 dark:bg-white/5">
               <p className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Extra time</p>
               <div className="mt-1 grid grid-cols-[90px_20px_90px] items-center gap-2">
@@ -280,6 +317,61 @@ function AdminResultRow({
               ) : null}
             </div>
           ) : null}
+
+          {isKnockout && isDraw90 && !legacyKnockoutScoring ? (
+            <div className="rounded-lg border border-primary-200/80 bg-linear-to-b from-primary-50/60 to-zinc-50 p-2.5 dark:border-primary-500/20 dark:from-primary-950/20 dark:to-white/5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-primary-700 dark:text-primary-300">
+                Penalty shootout
+              </p>
+              <p className="mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+                Enter the shootout score when full-time is a draw
+              </p>
+              <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                <div className="min-w-0">
+                  <label className="mb-1 block truncate text-[10px] font-medium text-zinc-600 dark:text-zinc-300">
+                    {row.home}
+                  </label>
+                  <input
+                    value={penaltyHs}
+                    onChange={(e) => setPenaltyHs(normalizeScore(e.target.value))}
+                    placeholder="0"
+                    inputMode="numeric"
+                    className={`h-8 w-full rounded-xl border bg-white px-2 text-xs dark:bg-zinc-950 ${
+                      penaltyTied
+                        ? "border-red-300 dark:border-red-500/50"
+                        : "border-zinc-200 dark:border-white/10"
+                    }`}
+                  />
+                </div>
+                <div className="pb-2 text-center text-zinc-400">-</div>
+                <div className="min-w-0">
+                  <label className="mb-1 block truncate text-[10px] font-medium text-zinc-600 dark:text-zinc-300">
+                    {row.away}
+                  </label>
+                  <input
+                    value={penaltyAs}
+                    onChange={(e) => setPenaltyAs(normalizeScore(e.target.value))}
+                    placeholder="0"
+                    inputMode="numeric"
+                    className={`h-8 w-full rounded-xl border bg-white px-2 text-xs dark:bg-zinc-950 ${
+                      penaltyTied
+                        ? "border-red-300 dark:border-red-500/50"
+                        : "border-zinc-200 dark:border-white/10"
+                    }`}
+                  />
+                </div>
+              </div>
+              {penaltyTied ? (
+                <p className="mt-2 text-[10px] font-medium text-red-600 dark:text-red-400">
+                  Shootout scores must have a winner.
+                </p>
+              ) : penaltyPreview ? (
+                <p className="mt-2 text-[10px] font-medium text-primary-700 dark:text-primary-300">
+                  {penaltyPreview}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {isFinished && scoreDirty ? (
           <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-300">Unsaved score</p>
@@ -311,7 +403,7 @@ function AdminResultRow({
             <button
               type="button"
               onClick={() =>
-                onComplete({ id: row.id, hs, as, etHs, etAs, penaltyWinner })
+                onComplete({ id: row.id, hs, as, etHs, etAs, penaltyWinner, penaltyHs, penaltyAs })
               }
               disabled={busy}
               className="inline-flex h-8 items-center justify-center rounded-full bg-zinc-950 px-3 text-xs text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
@@ -323,7 +415,7 @@ function AdminResultRow({
             <button
               type="button"
               onClick={() =>
-                onComplete({ id: row.id, hs, as, etHs, etAs, penaltyWinner })
+                onComplete({ id: row.id, hs, as, etHs, etAs, penaltyWinner, penaltyHs, penaltyAs })
               }
               disabled={busy}
               className="inline-flex h-8 items-center justify-center rounded-full border border-amber-300 bg-amber-50 px-3 text-xs text-amber-900 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/60"
@@ -452,6 +544,8 @@ export function AdminResults() {
     etHs: string,
     etAs: string,
     penaltyWinner: "home" | "away" | null,
+    penaltyHs: string,
+    penaltyAs: string,
   ) {
     setErr(null);
     setBusyId(id);
@@ -465,6 +559,7 @@ export function AdminResults() {
 
     const row = rows.find((r) => r.id === id);
     const isKnockout = isKnockoutStage(row?.stage);
+    const legacyKnockoutScoring = usesLegacyKnockoutScoring(row?.knockout_scoring_version);
     const payload: Record<string, unknown> = {
       fixtureId: id,
       complete: true,
@@ -473,27 +568,49 @@ export function AdminResults() {
     };
 
     if (isKnockout && homeScore === awayScore) {
-      const etHomeScore = parseScoreInput(etHs);
-      const etAwayScore = parseScoreInput(etAs);
-      if (
-        !Number.isFinite(etHomeScore) ||
-        !Number.isFinite(etAwayScore) ||
-        etHomeScore < 0 ||
-        etAwayScore < 0
-      ) {
-        setErr("Enter valid extra time scores when 90 minutes is a draw.");
-        setBusyId(null);
-        return;
-      }
-      payload.etHomeScore = Math.floor(etHomeScore);
-      payload.etAwayScore = Math.floor(etAwayScore);
-      if (etHomeScore === etAwayScore) {
-        if (penaltyWinner !== "home" && penaltyWinner !== "away") {
-          setErr("Pick the penalty shootout winner.");
+      if (legacyKnockoutScoring) {
+        const etHomeScore = parseScoreInput(etHs);
+        const etAwayScore = parseScoreInput(etAs);
+        if (
+          !Number.isFinite(etHomeScore) ||
+          !Number.isFinite(etAwayScore) ||
+          etHomeScore < 0 ||
+          etAwayScore < 0
+        ) {
+          setErr("Enter valid extra time scores when 90 minutes is a draw.");
           setBusyId(null);
           return;
         }
-        payload.penaltyWinner = penaltyWinner;
+        payload.etHomeScore = Math.floor(etHomeScore);
+        payload.etAwayScore = Math.floor(etAwayScore);
+        if (etHomeScore === etAwayScore) {
+          if (penaltyWinner !== "home" && penaltyWinner !== "away") {
+            setErr("Pick the penalty shootout winner.");
+            setBusyId(null);
+            return;
+          }
+          payload.penaltyWinner = penaltyWinner;
+        }
+      } else {
+        const penHomeScore = parseScoreInput(penaltyHs);
+        const penAwayScore = parseScoreInput(penaltyAs);
+        if (
+          !Number.isFinite(penHomeScore) ||
+          !Number.isFinite(penAwayScore) ||
+          penHomeScore < 0 ||
+          penAwayScore < 0
+        ) {
+          setErr("Enter valid penalty shootout scores when 90 minutes is a draw.");
+          setBusyId(null);
+          return;
+        }
+        if (penHomeScore === penAwayScore) {
+          setErr("Penalty shootout scores must have a winner.");
+          setBusyId(null);
+          return;
+        }
+        payload.penaltyHomeScore = Math.floor(penHomeScore);
+        payload.penaltyAwayScore = Math.floor(penAwayScore);
       }
     }
 
@@ -524,18 +641,33 @@ export function AdminResults() {
               result_home_score: Math.floor(homeScore),
               result_away_score: Math.floor(awayScore),
               result_et_home_score:
-                isKnockout && homeScore === awayScore
+                isKnockout && homeScore === awayScore && legacyKnockoutScoring
                   ? Math.floor(parseScoreInput(etHs))
                   : null,
               result_et_away_score:
-                isKnockout && homeScore === awayScore
+                isKnockout && homeScore === awayScore && legacyKnockoutScoring
                   ? Math.floor(parseScoreInput(etAs))
                   : null,
               result_penalty_winner:
-                isKnockout &&
-                homeScore === awayScore &&
-                parseScoreInput(etHs) === parseScoreInput(etAs)
-                  ? penaltyWinner
+                isKnockout && homeScore === awayScore
+                  ? legacyKnockoutScoring &&
+                    parseScoreInput(etHs) === parseScoreInput(etAs)
+                    ? penaltyWinner
+                    : !legacyKnockoutScoring
+                      ? parseScoreInput(penaltyHs) > parseScoreInput(penaltyAs)
+                        ? "home"
+                        : parseScoreInput(penaltyHs) < parseScoreInput(penaltyAs)
+                          ? "away"
+                          : null
+                      : null
+                  : null,
+              result_penalty_home_score:
+                isKnockout && homeScore === awayScore && !legacyKnockoutScoring
+                  ? Math.floor(parseScoreInput(penaltyHs))
+                  : null,
+              result_penalty_away_score:
+                isKnockout && homeScore === awayScore && !legacyKnockoutScoring
+                  ? Math.floor(parseScoreInput(penaltyAs))
                   : null,
             },
       ),
@@ -584,8 +716,8 @@ export function AdminResults() {
                   teamOptions={teamOptions}
                   onSaveStatus={({ id, status }) => void saveStatus(id, status)}
                   onSaveTeams={({ id, home, away }) => void saveTeams(id, home, away)}
-                  onComplete={({ id, hs, as, etHs, etAs, penaltyWinner }) =>
-                    void complete(id, hs, as, etHs, etAs, penaltyWinner)
+                  onComplete={({ id, hs, as, etHs, etAs, penaltyWinner, penaltyHs, penaltyAs }) =>
+                    void complete(id, hs, as, etHs, etAs, penaltyWinner, penaltyHs, penaltyAs)
                   }
                 />
               ))}
@@ -593,7 +725,9 @@ export function AdminResults() {
           </table>
           <div className="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400">
             Knockout fixtures show editable Team A / Team B fields — replace placeholders like 2A with
-            real team names, then click Save teams. Finished matches can be corrected with Update score.
+            real team names, then click Save teams. For upcoming knockouts, a draw after full-time
+            requires a penalty shootout score (e.g. 5–4). Finished legacy knockouts still use extra
+            time + penalty winner.
           </div>
         </div>
       )}

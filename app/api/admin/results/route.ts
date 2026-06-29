@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSessionCookieName, verifySession } from "@/lib/auth";
+import { isDrawScore, penaltyWinnerFromScores } from "@/lib/knockoutPrediction";
+import { usesLegacyKnockoutScoring } from "@/lib/knockoutScoring";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
 async function requireAdmin() {
@@ -32,6 +34,8 @@ export async function PUT(req: Request) {
         etHomeScore?: number | null;
         etAwayScore?: number | null;
         penaltyWinner?: "home" | "away" | null;
+        penaltyHomeScore?: number | null;
+        penaltyAwayScore?: number | null;
         updateTeams?: boolean;
         home?: string;
         away?: string;
@@ -93,7 +97,7 @@ export async function PUT(req: Request) {
 
     const { data: fixture, error: fetchErr } = await supabase
       .from("fixtures")
-      .select("stage")
+      .select("stage,knockout_scoring_version")
       .eq("id", fixtureId)
       .maybeSingle();
 
@@ -112,28 +116,55 @@ export async function PUT(req: Request) {
     let resultEtHome: number | null = null;
     let resultEtAway: number | null = null;
     let resultPenaltyWinner: "home" | "away" | null = null;
+    let resultPenaltyHome: number | null = null;
+    let resultPenaltyAway: number | null = null;
 
     if (isKnockout && home === away) {
-      const etHome = body.etHomeScore;
-      const etAway = body.etAwayScore;
-      if (!Number.isFinite(etHome) || !Number.isFinite(etAway) || (etHome ?? 0) < 0 || (etAway ?? 0) < 0) {
-        return NextResponse.json(
-          { ok: false, message: "Enter extra time score when 90 minutes is a draw." },
-          { status: 400 },
-        );
-      }
-      resultEtHome = Math.floor(etHome as number);
-      resultEtAway = Math.floor(etAway as number);
-
-      if (resultEtHome === resultEtAway) {
-        const pw = body.penaltyWinner;
-        if (pw !== "home" && pw !== "away") {
+      if (usesLegacyKnockoutScoring(fixture.knockout_scoring_version)) {
+        const etHome = body.etHomeScore;
+        const etAway = body.etAwayScore;
+        if (!Number.isFinite(etHome) || !Number.isFinite(etAway) || (etHome ?? 0) < 0 || (etAway ?? 0) < 0) {
           return NextResponse.json(
-            { ok: false, message: "Pick the penalty shootout winner when extra time is a draw." },
+            { ok: false, message: "Enter extra time score when 90 minutes is a draw." },
             { status: 400 },
           );
         }
-        resultPenaltyWinner = pw;
+        resultEtHome = Math.floor(etHome as number);
+        resultEtAway = Math.floor(etAway as number);
+
+        if (resultEtHome === resultEtAway) {
+          const pw = body.penaltyWinner;
+          if (pw !== "home" && pw !== "away") {
+            return NextResponse.json(
+              { ok: false, message: "Pick the penalty shootout winner when extra time is a draw." },
+              { status: 400 },
+            );
+          }
+          resultPenaltyWinner = pw;
+        }
+      } else {
+        const penHome = body.penaltyHomeScore;
+        const penAway = body.penaltyAwayScore;
+        if (
+          !Number.isFinite(penHome) ||
+          !Number.isFinite(penAway) ||
+          (penHome ?? 0) < 0 ||
+          (penAway ?? 0) < 0
+        ) {
+          return NextResponse.json(
+            { ok: false, message: "Enter penalty shootout scores when 90 minutes is a draw." },
+            { status: 400 },
+          );
+        }
+        resultPenaltyHome = Math.floor(penHome as number);
+        resultPenaltyAway = Math.floor(penAway as number);
+        if (resultPenaltyHome === resultPenaltyAway) {
+          return NextResponse.json(
+            { ok: false, message: "Penalty shootout scores must have a winner." },
+            { status: 400 },
+          );
+        }
+        resultPenaltyWinner = penaltyWinnerFromScores(resultPenaltyHome, resultPenaltyAway);
       }
     }
 
@@ -147,6 +178,8 @@ export async function PUT(req: Request) {
         result_et_home_score: resultEtHome,
         result_et_away_score: resultEtAway,
         result_penalty_winner: resultPenaltyWinner,
+        result_penalty_home_score: resultPenaltyHome,
+        result_penalty_away_score: resultPenaltyAway,
         result_updated_at: new Date().toISOString(),
       })
       .eq("id", fixtureId);

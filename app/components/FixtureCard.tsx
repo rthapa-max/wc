@@ -8,10 +8,12 @@ import {
   etWinnerFromScores,
   formatKnockoutPredictionSummary,
   isDrawScore,
+  penaltyWinnerFromScores,
   validateKnockoutPrediction,
   type EtWinnerPick,
   type SidePick,
 } from "@/lib/knockoutPrediction";
+import { usesLegacyKnockoutScoring } from "@/lib/knockoutScoring";
 import {
   formatKickoffLocal,
   getPredictionWindowState,
@@ -31,6 +33,8 @@ type Prediction = {
   etHomeScore?: number | null;
   etAwayScore?: number | null;
   penaltyWinner?: SidePick | null;
+  penaltyHomeScore?: number | null;
+  penaltyAwayScore?: number | null;
   updatedAt: number;
 };
 
@@ -112,6 +116,7 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
   const fixtureId = match.id ?? matchKey;
   const { user, ready } = useAuth();
   const isKnockout = isKnockoutStage(match.stage);
+  const legacyKnockoutScoring = usesLegacyKnockoutScoring(match.knockoutScoringVersion);
 
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -121,6 +126,8 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
   const [awayScore, setAwayScore] = useState("");
   const [etWinner, setEtWinner] = useState<EtWinnerPick | null>(null);
   const [penaltyWinner, setPenaltyWinner] = useState<SidePick | null>(null);
+  const [penaltyHomeScore, setPenaltyHomeScore] = useState("");
+  const [penaltyAwayScore, setPenaltyAwayScore] = useState("");
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -140,6 +147,8 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
       setAwayScore("");
       setEtWinner(null);
       setPenaltyWinner(null);
+      setPenaltyHomeScore("");
+      setPenaltyAwayScore("");
       return;
     }
 
@@ -147,6 +156,8 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
     setAwayScore(scoreToInput(next.awayScore));
     setEtWinner(etWinnerFromScores(next.etHomeScore, next.etAwayScore));
     setPenaltyWinner(next.penaltyWinner ?? null);
+    setPenaltyHomeScore(scoreToInput(next.penaltyHomeScore));
+    setPenaltyAwayScore(scoreToInput(next.penaltyAwayScore));
   }
 
   useEffect(() => {
@@ -173,6 +184,8 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
               et_home_score: number | null;
               et_away_score: number | null;
               penalty_winner: "home" | "away" | null;
+              penalty_home_score: number | null;
+              penalty_away_score: number | null;
               updated_at: string;
             } | null;
           }
@@ -206,6 +219,8 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
           data.penalty_winner === "home" || data.penalty_winner === "away"
             ? data.penalty_winner
             : null,
+        penaltyHomeScore: data.penalty_home_score ?? null,
+        penaltyAwayScore: data.penalty_away_score ?? null,
         updatedAt: new Date(data.updated_at ?? Date.now()).getTime(),
       };
       setPrediction(next);
@@ -241,30 +256,81 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
     Number.isFinite(parsedHome) && Number.isFinite(parsedAway) && parsedHome >= 0 && parsedAway >= 0;
   const isDraw90 = scoresEntered && hasValid90 && isDrawScore(parsedHome, parsedAway);
 
+  const penHomeNum = penaltyHomeScore === "" ? null : parseScoreInput(penaltyHomeScore);
+  const penAwayNum = penaltyAwayScore === "" ? null : parseScoreInput(penaltyAwayScore);
+  const penaltyBothEntered =
+    penHomeNum != null &&
+    penAwayNum != null &&
+    Number.isFinite(penHomeNum) &&
+    Number.isFinite(penAwayNum);
+  const penaltyTied = penaltyBothEntered && penHomeNum === penAwayNum;
+  const penaltyWinnerTeam = !penaltyBothEntered
+    ? null
+    : penHomeNum! > penAwayNum!
+      ? match.home
+      : penHomeNum! < penAwayNum!
+        ? match.away
+        : null;
+
   useEffect(() => {
     if (!isKnockout || !isDraw90) {
       setEtWinner(null);
       setPenaltyWinner(null);
+      setPenaltyHomeScore("");
+      setPenaltyAwayScore("");
       return;
     }
-    if (etWinner !== "draw") {
+    if (legacyKnockoutScoring && etWinner !== "draw") {
       setPenaltyWinner(null);
     }
-  }, [isDraw90, etWinner, isKnockout]);
+    if (!legacyKnockoutScoring) {
+      setEtWinner(null);
+    }
+  }, [isDraw90, etWinner, isKnockout, legacyKnockoutScoring]);
 
   function buildKnockoutFields(home: number, away: number): {
     etWinner: EtWinnerPick | null;
     etHomeScore: number | null;
     etAwayScore: number | null;
     penaltyWinner: SidePick | null;
+    penaltyHomeScore: number | null;
+    penaltyAwayScore: number | null;
   } {
     if (!isKnockout || !isDrawScore(home, away)) {
-      return { etWinner: null, etHomeScore: null, etAwayScore: null, penaltyWinner: null };
+      return {
+        etWinner: null,
+        etHomeScore: null,
+        etAwayScore: null,
+        penaltyWinner: null,
+        penaltyHomeScore: null,
+        penaltyAwayScore: null,
+      };
+    }
+
+    if (!legacyKnockoutScoring) {
+      const penHome = penaltyHomeScore === "" ? null : Number(penaltyHomeScore);
+      const penAway = penaltyAwayScore === "" ? null : Number(penaltyAwayScore);
+      const winner = penaltyWinnerFromScores(penHome, penAway);
+      return {
+        etWinner: null,
+        etHomeScore: null,
+        etAwayScore: null,
+        penaltyWinner: winner,
+        penaltyHomeScore: penHome,
+        penaltyAwayScore: penAway,
+      };
     }
 
     const pick = etWinner;
     if (pick !== "home" && pick !== "away" && pick !== "draw") {
-      return { etWinner: null, etHomeScore: null, etAwayScore: null, penaltyWinner: null };
+      return {
+        etWinner: null,
+        etHomeScore: null,
+        etAwayScore: null,
+        penaltyWinner: null,
+        penaltyHomeScore: null,
+        penaltyAwayScore: null,
+      };
     }
 
     const scores = etScoresFromWinner(pick);
@@ -273,6 +339,8 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
       etHomeScore: scores.home,
       etAwayScore: scores.away,
       penaltyWinner: pick === "draw" ? penaltyWinner : null,
+      penaltyHomeScore: null,
+      penaltyAwayScore: null,
     };
   }
 
@@ -286,9 +354,12 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
         awayScore: next.awayScore,
         etWinner: etWinnerFromScores(next.etHomeScore, next.etAwayScore),
         penaltyWinner: next.penaltyWinner ?? null,
+        penaltyHomeScore: next.penaltyHomeScore ?? null,
+        penaltyAwayScore: next.penaltyAwayScore ?? null,
       },
       match.home,
       match.away,
+      match.knockoutScoringVersion,
     );
   }
 
@@ -299,11 +370,13 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
     if (!Number.isFinite(hs) || !Number.isFinite(as) || hs < 0 || as < 0) return;
 
     const knockoutFields = buildKnockoutFields(Math.floor(hs), Math.floor(as));
-    const validationError = validateKnockoutPrediction(isKnockout, {
+    const validationError = validateKnockoutPrediction(isKnockout, match.knockoutScoringVersion, {
       homeScore: Math.floor(hs),
       awayScore: Math.floor(as),
       etWinner: knockoutFields.etWinner,
       penaltyWinner: knockoutFields.penaltyWinner,
+      penaltyHomeScore: knockoutFields.penaltyHomeScore,
+      penaltyAwayScore: knockoutFields.penaltyAwayScore,
     });
     if (validationError) {
       setServerError(validationError);
@@ -321,6 +394,8 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
       etHomeScore: knockoutFields.etHomeScore,
       etAwayScore: knockoutFields.etAwayScore,
       penaltyWinner: knockoutFields.penaltyWinner,
+      penaltyHomeScore: knockoutFields.penaltyHomeScore,
+      penaltyAwayScore: knockoutFields.penaltyAwayScore,
       updatedAt: Date.now(),
     };
 
@@ -339,6 +414,8 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
         awayScore: next.awayScore,
         etWinner: knockoutFields.etWinner,
         penaltyWinner: knockoutFields.penaltyWinner,
+        penaltyHomeScore: knockoutFields.penaltyHomeScore,
+        penaltyAwayScore: knockoutFields.penaltyAwayScore,
       }),
     }).catch(() => null);
 
@@ -382,9 +459,14 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
         predictedEtHome: prediction.etHomeScore ?? null,
         predictedEtAway: prediction.etAwayScore ?? null,
         predictedPenaltyWinner: prediction.penaltyWinner ?? null,
+        predictedPenaltyHome: prediction.penaltyHomeScore ?? null,
+        predictedPenaltyAway: prediction.penaltyAwayScore ?? null,
         resultEtHome: match.resultEtHomeScore ?? null,
         resultEtAway: match.resultEtAwayScore ?? null,
         resultPenaltyWinner: match.resultPenaltyWinner ?? null,
+        resultPenaltyHome: match.resultPenaltyHomeScore ?? null,
+        resultPenaltyAway: match.resultPenaltyAwayScore ?? null,
+        knockoutScoringVersion: match.knockoutScoringVersion ?? null,
       },
     );
   }, [
@@ -395,6 +477,9 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
     match.resultEtHomeScore,
     match.resultEtAwayScore,
     match.resultPenaltyWinner,
+    match.resultPenaltyHomeScore,
+    match.resultPenaltyAwayScore,
+    match.knockoutScoringVersion,
     match.stage,
   ]);
 
@@ -456,7 +541,7 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
                     <span className={`ml-1.5 ${predictionPointsClass(earnedPoints)}`}>
                       {earnedPoints} {earnedPoints === 1 ? "point" : "points"}
                       <span className="ml-1 font-normal text-secondary-text">
-                        ({predictionPointsLabel(earnedPoints, match.stage)})
+                        ({predictionPointsLabel(earnedPoints, match.stage, match.knockoutScoringVersion)})
                       </span>
                     </span>
                   ) : null}
@@ -473,7 +558,7 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
               <div className="flex w-full flex-col items-center gap-2">
                 {isKnockout ? (
                   <p className="text-[11px] font-medium uppercase tracking-wide text-secondary-text">
-                    90 minutes
+                    Full-time
                   </p>
                 ) : null}
                 <div className="flex items-center justify-center gap-4">
@@ -499,7 +584,7 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
                 </div>
               </div>
 
-              {isKnockout && isDraw90 ? (
+              {isKnockout && isDraw90 && legacyKnockoutScoring ? (
                 <div className="w-full rounded-xl border border-primary-100 bg-primary-50/40 px-3 py-3">
                   <p className="text-center text-[11px] font-medium uppercase tracking-wide text-primary-700">
                     Extra time — pick a winner or draw
@@ -545,7 +630,7 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
                 </div>
               ) : null}
 
-              {isKnockout && isDraw90 && etWinner === "draw" ? (
+              {isKnockout && isDraw90 && legacyKnockoutScoring && etWinner === "draw" ? (
                 <div className="w-full rounded-xl border border-secondary-border bg-surface-blue-50 px-3 py-3">
                   <p className="text-center text-[11px] font-medium text-primary-text">
                     Penalties — pick a winner
@@ -576,6 +661,100 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
                       {match.away}
                     </button>
                   </div>
+                </div>
+              ) : null}
+
+              {isKnockout && isDraw90 && !legacyKnockoutScoring ? (
+                <div className="w-full rounded-2xl border border-primary-200 bg-linear-to-b from-primary-50/70 to-surface-blue-50 px-4 py-3.5 shadow-sm">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span aria-hidden="true" className="text-sm">
+                      ⚽
+                    </span>
+                    <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-primary-700">
+                      Penalty shootout
+                    </p>
+                  </div>
+             
+
+                  <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                    <div className="flex min-w-0 flex-col items-center gap-1.5">
+                      {/* <span className="flex items-center gap-1.5">
+                        {flagUrlForTeam(match.home, 40) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={flagUrlForTeam(match.home, 40)!}
+                            alt=""
+                            width={18}
+                            height={13}
+                            className="h-[13px] w-[18px] shrink-0 rounded-[2px] ring-1 ring-secondary-border"
+                            loading="lazy"
+                          />
+                        ) : null}
+                        <span className="truncate text-[11px] font-medium text-primary-text">
+                          {match.home}
+                        </span>
+                      </span> */}
+                      <input
+                        inputMode="numeric"
+                        value={penaltyHomeScore}
+                        onChange={(e) => setPenaltyHomeScore(normalizeScoreInput(e.target.value))}
+                        disabled={!canPredict}
+                        className={`${scoreInputClass} ${
+                          penaltyTied ? "border-danger-300 focus:border-danger-400 focus:ring-danger-200/40" : ""
+                        }`}
+                        placeholder="0"
+                        aria-label={`${match.home} penalty goals`}
+                      />
+                    </div>
+
+                    <span className="pb-2.5 text-sm font-semibold text-gray-300">-</span>
+
+                    <div className="flex min-w-0 flex-col items-center gap-1.5">
+                      {/* <span className="flex items-center gap-1.5">
+                        {flagUrlForTeam(match.away, 40) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={flagUrlForTeam(match.away, 40)!}
+                            alt=""
+                            width={18}
+                            height={13}
+                            className="h-[13px] w-[18px] shrink-0 rounded-[2px] ring-1 ring-secondary-border"
+                            loading="lazy"
+                          />
+                        ) : null}
+                        <span className="truncate text-[11px] font-medium text-primary-text">
+                          {match.away}
+                        </span>
+                      </span> */}
+                      <input
+                        inputMode="numeric"
+                        value={penaltyAwayScore}
+                        onChange={(e) => setPenaltyAwayScore(normalizeScoreInput(e.target.value))}
+                        disabled={!canPredict}
+                        className={`${scoreInputClass} ${
+                          penaltyTied ? "border-danger-300 focus:border-danger-400 focus:ring-danger-200/40" : ""
+                        }`}
+                        placeholder="0"
+                        aria-label={`${match.away} penalty goals`}
+                      />
+                    </div>
+                  </div>
+
+                  {penaltyTied ? (
+                    <p className="mt-2.5 text-center text-[11px] font-medium text-danger-600">
+                      A shootout can&apos;t end level — pick a winning score.
+                    </p>
+                  ) : penaltyWinnerTeam ? (
+                    <p className="mt-2.5 flex items-center justify-center gap-1 text-center text-[11px] font-medium text-primary-700">
+                      <span aria-hidden="true">🏆</span>
+                      {penaltyWinnerTeam} to win {Math.max(penHomeNum!, penAwayNum!)}-
+                      {Math.min(penHomeNum!, penAwayNum!)} on penalties
+                    </p>
+                  ) : (
+                    <p className="mt-2.5 text-center text-[11px] text-secondary-text">
+                      Exact score = +3 pts · correct winner = +2 pts
+                    </p>
+                  )}
                 </div>
               ) : null}
             </div>

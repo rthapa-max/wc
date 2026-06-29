@@ -1,5 +1,8 @@
 import { Resend } from "resend";
 import { flagUrlForTeam } from "@/lib/fixtures";
+import { isKnockoutStage } from "@/lib/teams";
+import { usesLegacyKnockoutScoring } from "@/lib/knockoutScoring";
+import { formatPenaltyShootoutResult } from "@/lib/knockoutPrediction";
 
 export type PredictionEmailPayload = {
   userDisplay: string;
@@ -36,6 +39,17 @@ function buildPredictionEmailHtml(payload: PredictionEmailPayload) {
   `.trim();
 }
 
+export type PredictionWindowClosedRow = {
+  userDisplay: string;
+  homeScore: number;
+  awayScore: number;
+  winner: string;
+  extraTime: string | null;
+  penalties: string | null;
+  penaltyHomeScore?: number | null;
+  penaltyAwayScore?: number | null;
+};
+
 export type PredictionWindowClosedPayload = {
   home: string;
   away: string;
@@ -43,14 +57,9 @@ export type PredictionWindowClosedPayload = {
   time: string;
   city?: string | null;
   closedAt: string;
-  predictions: {
-    userDisplay: string;
-    homeScore: number;
-    awayScore: number;
-    winner: string;
-    extraTime: string | null;
-    penalties: string | null;
-  }[];
+  stage?: string | null;
+  knockoutScoringVersion?: string | null;
+  predictions: PredictionWindowClosedRow[];
 };
 
 function teamFlagImg(team: string) {
@@ -63,26 +72,91 @@ function matchWithFlagsHtml(home: string, away: string) {
   return `${teamFlagImg(home)}${home} &nbsp;vs&nbsp; ${teamFlagImg(away)}${away}`;
 }
 
+function penaltyCell(
+  home: string,
+  away: string,
+  row: PredictionWindowClosedRow,
+  legacyKnockout: boolean,
+) {
+  if (legacyKnockout) {
+    return row.penalties ?? "—";
+  }
+
+  const formatted = formatPenaltyShootoutResult(
+    home,
+    away,
+    row.penaltyHomeScore,
+    row.penaltyAwayScore,
+  );
+  return formatted ?? row.penalties ?? "—";
+}
+
 function buildPredictionWindowClosedHtml(payload: PredictionWindowClosedPayload) {
   const when = [payload.dateLabel, payload.time, payload.city].filter(Boolean).join(" · ");
   const closedAt = new Date(payload.closedAt).toUTCString();
   const matchLine = matchWithFlagsHtml(payload.home, payload.away);
+  const isKnockout = isKnockoutStage(payload.stage);
+  const legacyKnockout = isKnockout && usesLegacyKnockoutScoring(payload.knockoutScoringVersion);
+  const v2Knockout = isKnockout && !legacyKnockout;
 
-  const rows =
-    payload.predictions.length === 0
-      ? "<tr><td colspan='5'>No predictions submitted.</td></tr>"
-      : payload.predictions
-          .map(
-            (p) => `
+  let tableHead: string;
+  let tableRows: string;
+
+  if (v2Knockout) {
+    tableHead = "<tr><th>User</th><th>Full-time</th><th>Penalty shootout</th></tr>";
+    tableRows =
+      payload.predictions.length === 0
+        ? "<tr><td colspan='3'>No predictions submitted.</td></tr>"
+        : payload.predictions
+            .map(
+              (p) => `
+      <tr>
+        <td>${p.userDisplay}</td>
+        <td>${p.homeScore} – ${p.awayScore}</td>
+        <td>${penaltyCell(payload.home, payload.away, p, false)}</td>
+      </tr>`,
+            )
+            .join("");
+  } else if (legacyKnockout) {
+    tableHead =
+      "<tr><th>User</th><th>Score (full-time)</th><th>Winner</th><th>Extra time</th><th>Penalties</th></tr>";
+    tableRows =
+      payload.predictions.length === 0
+        ? "<tr><td colspan='5'>No predictions submitted.</td></tr>"
+        : payload.predictions
+            .map(
+              (p) => `
       <tr>
         <td>${p.userDisplay}</td>
         <td>${p.homeScore} – ${p.awayScore}</td>
         <td>${p.winner}</td>
         <td>${p.extraTime ?? "—"}</td>
-        <td>${p.penalties ?? "—"}</td>
+        <td>${penaltyCell(payload.home, payload.away, p, true)}</td>
       </tr>`,
-          )
-          .join("");
+            )
+            .join("");
+  } else {
+    tableHead = "<tr><th>User</th><th>Score</th><th>Winner</th></tr>";
+    tableRows =
+      payload.predictions.length === 0
+        ? "<tr><td colspan='3'>No predictions submitted.</td></tr>"
+        : payload.predictions
+            .map(
+              (p) => `
+      <tr>
+        <td>${p.userDisplay}</td>
+        <td>${p.homeScore} – ${p.awayScore}</td>
+        <td>${p.winner}</td>
+      </tr>`,
+            )
+            .join("");
+  }
+
+  const scoringNote = v2Knockout
+    ? "<p style='color:#6b7280;font-size:13px;margin-top:12px'>Knockout draw predictions include a penalty shootout score (e.g. 5–4).</p>"
+    : legacyKnockout
+      ? "<p style='color:#6b7280;font-size:13px;margin-top:12px'>Legacy knockout scoring — extra time and penalty winner picks included where applicable.</p>"
+      : "";
 
   return `
     <h2>WC26 predictions closed</h2>
@@ -94,11 +168,10 @@ function buildPredictionWindowClosedHtml(payload: PredictionWindowClosedPayload)
       <tr><td><strong>Predictions</strong></td><td>${payload.predictions.length}</td></tr>
     </table>
     <table cellpadding="6" cellspacing="0" style="border-collapse:collapse" border="1">
-      <thead>
-        <tr><th>User</th><th>Score (90 min)</th><th>Winner</th><th>Extra time</th><th>Penalties</th></tr>
-      </thead>
-      <tbody>${rows}</tbody>
+      <thead>${tableHead}</thead>
+      <tbody>${tableRows}</tbody>
     </table>
+    ${scoringNote}
   `.trim();
 }
 

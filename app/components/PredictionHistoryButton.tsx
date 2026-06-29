@@ -13,6 +13,8 @@ type Row = {
   et_home_score: number | null;
   et_away_score: number | null;
   penalty_winner: "home" | "away" | null;
+  penalty_home_score: number | null;
+  penalty_away_score: number | null;
   updated_at: string;
   fixtures?: {
     home: string;
@@ -20,6 +22,7 @@ type Row = {
     date_label: string;
     time: string;
     stage?: string | null;
+    knockout_scoring_version?: "legacy" | "v2" | null;
   } | null;
 };
 
@@ -156,6 +159,9 @@ export function PredictionHistoryButton() {
                           row.penalty_winner,
                           home,
                           away,
+                          row.fixtures?.knockout_scoring_version,
+                          row.penalty_home_score,
+                          row.penalty_away_score,
                         );
 
                         return (
@@ -184,8 +190,11 @@ export function PredictionHistoryButton() {
                             </span>
                           </div>
                           {knockoutExtras ? (
-                            <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
-                              {knockoutExtras}
+                            <div className="mt-1.5">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-700 ring-1 ring-zinc-200 dark:bg-white/10 dark:text-zinc-200 dark:ring-white/15">
+                                <span aria-hidden="true">⚽</span>
+                                {knockoutExtras}
+                              </span>
                             </div>
                           ) : null}
                         </li>

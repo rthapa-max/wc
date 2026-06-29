@@ -19,29 +19,29 @@ const GROUP_RULES = [
   },
 ] as const;
 
-const KNOCKOUT_RULES = [
+const KNOCKOUT_V2_RULES = [
   {
-    points: "3",
-    label: "Exact 90 minutes",
-    example: "Correct score after 90 minutes (including a draw).",
+    points: "5",
+    label: "Exact score (full-time)",
+    example: "Pick 3-2 and result is 3-2 after regular time.",
     tone: "primary" as const,
   },
   {
-    points: "+1",
-    label: "Extra time",
-    example: "Correct extra time outcome — right winner or another draw to penalties.",
+    points: "3",
+    label: "Correct outcome",
+    example: "Pick 3-2, result 2-1 (right winner). Pick 2-2, result 1-1 (draw, wrong score).",
     tone: "yellow" as const,
   },
   {
-    points: "+1",
-    label: "Penalties",
-    example: "Correct penalty shootout winner when extra time is also a draw.",
+    points: "+3",
+    label: "Exact penalties",
+    example: "When the match is a draw after full-time, exact penalty score (e.g. 5-4).",
     tone: "surface" as const,
   },
   {
-    points: "5",
-    label: "Max total",
-    example: "3 (90 min) + 1 (ET) + 1 (pens) = 5 points if everything is correct.",
+    points: "+2",
+    label: "Penalty winner",
+    example: "Correct penalty winner but wrong shootout score (e.g. pick 5-4, result 4-3).",
     tone: "muted" as const,
   },
 ] as const;
@@ -137,10 +137,10 @@ export function ScoringGuide() {
 
         <div>
           <p className="text-[11px] font-medium text-secondary-text sm:text-xs">
-            Knockout — 90 min uses 3/2/1, then +1 per correct extra time and penalties
+            Knockout — 5/3/0 after full-time, plus up to 3 penalty points (no participation pts)
           </p>
           <ul className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4 sm:gap-x-4">
-            {KNOCKOUT_RULES.map((rule) => (
+            {KNOCKOUT_V2_RULES.map((rule) => (
               <RuleRow
                 key={rule.label}
                 points={rule.points}

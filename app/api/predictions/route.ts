@@ -5,9 +5,11 @@ import {
   etScoresFromWinner,
   etWinnerFromScores,
   isDrawScore,
+  penaltyWinnerFromScores,
   validateKnockoutPrediction,
   type EtWinnerPick,
 } from "@/lib/knockoutPrediction";
+import { usesLegacyKnockoutScoring } from "@/lib/knockoutScoring";
 import { isKnockoutStage } from "@/lib/teams";
 import { outcomeFromScore } from "@/lib/scoring";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
@@ -62,7 +64,9 @@ export async function GET(req: Request) {
   }
   const { data, error } = await supabase
     .from("predictions")
-    .select("winner,home_score,away_score,et_home_score,et_away_score,penalty_winner,updated_at")
+    .select(
+      "winner,home_score,away_score,et_home_score,et_away_score,penalty_winner,penalty_home_score,penalty_away_score,updated_at",
+    )
     .eq("user_id", user.id)
     .eq("fixture_id", fixtureId)
     .maybeSingle();
@@ -84,6 +88,8 @@ export async function PUT(req: Request) {
         etHomeScore?: number | null;
         etAwayScore?: number | null;
         penaltyWinner?: "home" | "away" | null;
+        penaltyHomeScore?: number | null;
+        penaltyAwayScore?: number | null;
       }
     | null;
 
@@ -102,6 +108,8 @@ export async function PUT(req: Request) {
   let etHome: number | null = null;
   let etAway: number | null = null;
   let penaltyWinner: "home" | "away" | null = null;
+  let penaltyHome: number | null = null;
+  let penaltyAway: number | null = null;
 
   const etWinner = body?.etWinner;
   if (etWinner === "home" || etWinner === "away" || etWinner === "draw") {
@@ -122,6 +130,22 @@ export async function PUT(req: Request) {
     penaltyWinner = body.penaltyWinner;
   }
 
+  if (body?.penaltyHomeScore != null && body?.penaltyAwayScore != null) {
+    penaltyHome = Number(body.penaltyHomeScore);
+    penaltyAway = Number(body.penaltyAwayScore);
+    if (
+      !Number.isFinite(penaltyHome) ||
+      !Number.isFinite(penaltyAway) ||
+      penaltyHome < 0 ||
+      penaltyAway < 0
+    ) {
+      return NextResponse.json({ ok: false, message: "Invalid penalty score" }, { status: 400 });
+    }
+    penaltyHome = Math.floor(penaltyHome);
+    penaltyAway = Math.floor(penaltyAway);
+    penaltyWinner = penaltyWinnerFromScores(penaltyHome, penaltyAway);
+  }
+
   let supabase;
   try {
     supabase = getSupabaseServerClient();
@@ -134,7 +158,7 @@ export async function PUT(req: Request) {
 
   const { data: fixture, error: fixtureErr } = await supabase
     .from("fixtures")
-    .select("status,stage,date_label,time,city,kickoff_at,home,away")
+    .select("status,stage,date_label,time,city,kickoff_at,home,away,knockout_scoring_version")
     .eq("id", fixtureId)
     .maybeSingle();
 
@@ -158,11 +182,13 @@ export async function PUT(req: Request) {
   const isKnockout = isKnockoutStage(fixture.stage);
   const validationEtWinner: EtWinnerPick | null = etWinnerFromScores(etHome, etAway);
 
-  const validationError = validateKnockoutPrediction(isKnockout, {
+  const validationError = validateKnockoutPrediction(isKnockout, fixture.knockout_scoring_version, {
     homeScore: home,
     awayScore: away,
     etWinner: validationEtWinner,
     penaltyWinner,
+    penaltyHomeScore: penaltyHome,
+    penaltyAwayScore: penaltyAway,
   });
   if (validationError) {
     return NextResponse.json({ ok: false, message: validationError }, { status: 400 });
@@ -172,8 +198,17 @@ export async function PUT(req: Request) {
     etHome = null;
     etAway = null;
     penaltyWinner = null;
-  } else if (!isDrawScore(etHome ?? -1, etAway ?? -2)) {
-    penaltyWinner = null;
+    penaltyHome = null;
+    penaltyAway = null;
+  } else if (usesLegacyKnockoutScoring(fixture.knockout_scoring_version)) {
+    penaltyHome = null;
+    penaltyAway = null;
+    if (!isDrawScore(etHome ?? -1, etAway ?? -2)) {
+      penaltyWinner = null;
+    }
+  } else {
+    etHome = null;
+    etAway = null;
   }
 
   const { error } = await supabase.from("predictions").upsert(
@@ -186,6 +221,8 @@ export async function PUT(req: Request) {
       et_home_score: etHome,
       et_away_score: etAway,
       penalty_winner: penaltyWinner,
+      penalty_home_score: penaltyHome,
+      penalty_away_score: penaltyAway,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id,fixture_id" },

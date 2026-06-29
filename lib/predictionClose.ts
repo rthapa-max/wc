@@ -12,6 +12,8 @@ type FixtureRow = {
   city: string | null;
   kickoff_at: string;
   status: string;
+  stage: string | null;
+  knockout_scoring_version: "legacy" | "v2" | null;
 };
 
 type PredictionRow = {
@@ -20,6 +22,8 @@ type PredictionRow = {
   et_home_score: number | null;
   et_away_score: number | null;
   penalty_winner: "home" | "away" | null;
+  penalty_home_score: number | null;
+  penalty_away_score: number | null;
   winner: "home" | "away" | "draw";
   user_id: string;
 };
@@ -52,7 +56,7 @@ export async function processPredictionWindowClosures(nowMs = Date.now()) {
 
   const { data: fixtures, error: fixturesErr } = await supabase
     .from("fixtures")
-    .select("id,home,away,date_label,time,city,kickoff_at,status")
+    .select("id,home,away,date_label,time,city,kickoff_at,status,stage,knockout_scoring_version")
     .is("prediction_close_notified_at", null)
     .not("kickoff_at", "is", null)
     .gt("kickoff_at", nowIso)
@@ -98,7 +102,9 @@ export async function processPredictionWindowClosures(nowMs = Date.now()) {
 
     const { data: predictions, error: predErr } = await supabase
       .from("predictions")
-      .select("home_score,away_score,et_home_score,et_away_score,penalty_winner,winner,user_id")
+      .select(
+        "home_score,away_score,et_home_score,et_away_score,penalty_winner,penalty_home_score,penalty_away_score,winner,user_id",
+      )
       .eq("fixture_id", fixture.id);
 
     if (predErr) {
@@ -142,6 +148,8 @@ export async function processPredictionWindowClosures(nowMs = Date.now()) {
         time: fixture.time,
         city: fixture.city,
         closedAt: new Date(closesAt).toISOString(),
+        stage: fixture.stage,
+        knockoutScoringVersion: fixture.knockout_scoring_version,
         predictions: predRows.map((p) => {
           const user = usersById.get(p.user_id);
           const { et, penalties } = knockoutExtrasLabels(
@@ -152,8 +160,11 @@ export async function processPredictionWindowClosures(nowMs = Date.now()) {
             p.penalty_winner === "home" || p.penalty_winner === "away"
               ? p.penalty_winner
               : null,
+            p.penalty_home_score,
+            p.penalty_away_score,
             fixture.home,
             fixture.away,
+            fixture.knockout_scoring_version,
           );
           return {
             userDisplay: user ? userDisplay(user) : "Unknown user",
@@ -162,6 +173,8 @@ export async function processPredictionWindowClosures(nowMs = Date.now()) {
             winner: winnerLabel(fixture.home, fixture.away, p.winner),
             extraTime: et,
             penalties,
+            penaltyHomeScore: p.penalty_home_score,
+            penaltyAwayScore: p.penalty_away_score,
           };
         }),
       });

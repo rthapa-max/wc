@@ -64,7 +64,7 @@ export async function GET(_req: Request, context: RouteContext) {
   const { data: fixture, error: fixtureErr } = await supabase
     .from("fixtures")
     .select(
-      "id,home,away,stage,status,result_home_score,result_away_score,result_et_home_score,result_et_away_score,result_penalty_winner",
+      "id,home,away,stage,status,knockout_scoring_version,result_home_score,result_away_score,result_et_home_score,result_et_away_score,result_penalty_winner,result_penalty_home_score,result_penalty_away_score",
     )
     .eq("id", fixtureId)
     .maybeSingle();
@@ -84,7 +84,9 @@ export async function GET(_req: Request, context: RouteContext) {
 
   const { data: predictions, error: predictionsErr } = await supabase
     .from("predictions")
-    .select("user_id,winner,home_score,away_score,et_home_score,et_away_score,penalty_winner")
+    .select(
+      "user_id,winner,home_score,away_score,et_home_score,et_away_score,penalty_winner,penalty_home_score,penalty_away_score",
+    )
     .eq("fixture_id", fixtureId);
 
   if (predictionsErr) {
@@ -126,12 +128,17 @@ export async function GET(_req: Request, context: RouteContext) {
             row.penalty_winner === "home" || row.penalty_winner === "away"
               ? row.penalty_winner
               : null,
+          predictedPenaltyHome: row.penalty_home_score,
+          predictedPenaltyAway: row.penalty_away_score,
           resultEtHome: fixture.result_et_home_score,
           resultEtAway: fixture.result_et_away_score,
           resultPenaltyWinner:
             fixture.result_penalty_winner === "home" || fixture.result_penalty_winner === "away"
               ? fixture.result_penalty_winner
               : null,
+          resultPenaltyHome: fixture.result_penalty_home_score,
+          resultPenaltyAway: fixture.result_penalty_away_score,
+          knockoutScoringVersion: fixture.knockout_scoring_version,
         },
       );
       const knockoutExtras = formatKnockoutExtrasLine(
@@ -144,6 +151,9 @@ export async function GET(_req: Request, context: RouteContext) {
           : null,
         fixture.home,
         fixture.away,
+        fixture.knockout_scoring_version,
+        row.penalty_home_score,
+        row.penalty_away_score,
       );
 
       return {
@@ -154,7 +164,7 @@ export async function GET(_req: Request, context: RouteContext) {
         awayScore: row.away_score,
         knockoutExtras,
         points,
-        pointsLabel: predictionPointsLabel(points, fixture.stage),
+        pointsLabel: predictionPointsLabel(points, fixture.stage, fixture.knockout_scoring_version),
       };
     })
     .sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
@@ -171,6 +181,8 @@ export async function GET(_req: Request, context: RouteContext) {
       resultEtHomeScore: fixture.result_et_home_score,
       resultEtAwayScore: fixture.result_et_away_score,
       resultPenaltyWinner: fixture.result_penalty_winner,
+      resultPenaltyHomeScore: fixture.result_penalty_home_score,
+      resultPenaltyAwayScore: fixture.result_penalty_away_score,
     },
     predictions: list,
   });

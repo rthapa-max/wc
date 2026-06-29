@@ -17,6 +17,9 @@ export type FixtureMatch = {
   resultEtHomeScore?: number | null;
   resultEtAwayScore?: number | null;
   resultPenaltyWinner?: "home" | "away" | null;
+  resultPenaltyHomeScore?: number | null;
+  resultPenaltyAwayScore?: number | null;
+  knockoutScoringVersion?: "legacy" | "v2" | null;
 };
 
 const MONTHS: Record<string, number> = {

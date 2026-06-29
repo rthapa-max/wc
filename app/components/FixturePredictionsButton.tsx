@@ -162,16 +162,17 @@ export function FixturePredictionsButton({
                                   {row.pointsLabel ?? predictionPointsLabel(row.points)}
                                 </div>
                               </div>
-                              <div className="shrink-0 text-right">
+                              <div className="flex shrink-0 flex-col items-end gap-0.5">
                                 <div className="text-sm font-semibold tabular-nums text-primary-text">
                                   {row.homeScore}-{row.awayScore}
                                 </div>
                                 {row.knockoutExtras ? (
-                                  <div className="mt-0.5 max-w-[10rem] text-[10px] leading-snug text-secondary-text">
-                                    {row.knockoutExtras}
-                                  </div>
+                                  <span className="inline-flex max-w-44 items-center gap-1 rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-medium leading-snug text-primary-700 ring-1 ring-primary-200">
+                                    <span aria-hidden="true">⚽</span>
+                                    <span className="truncate">{row.knockoutExtras}</span>
+                                  </span>
                                 ) : null}
-                                <div className="mt-0.5 text-[11px] font-medium text-primary-600">
+                                <div className="text-[11px] font-medium text-primary-600">
                                   {row.points} {row.points === 1 ? "pt" : "pts"}
                                 </div>
                               </div>

@@ -29,6 +29,9 @@ type FixtureRow = {
   result_et_home_score: number | null;
   result_et_away_score: number | null;
   result_penalty_winner: "home" | "away" | null;
+  result_penalty_home_score: number | null;
+  result_penalty_away_score: number | null;
+  knockout_scoring_version: "legacy" | "v2" | null;
 };
 
 const PERIOD_FILTERS: { id: FixtureDatePeriod; label: string }[] = [
@@ -61,6 +64,9 @@ function toMatch(r: FixtureRow): FixtureMatch {
     resultEtHomeScore: r.result_et_home_score,
     resultEtAwayScore: r.result_et_away_score,
     resultPenaltyWinner: r.result_penalty_winner,
+    resultPenaltyHomeScore: r.result_penalty_home_score,
+    resultPenaltyAwayScore: r.result_penalty_away_score,
+    knockoutScoringVersion: r.knockout_scoring_version ?? "v2",
   };
 }
 
