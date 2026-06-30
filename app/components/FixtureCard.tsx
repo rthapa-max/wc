@@ -7,6 +7,7 @@ import {
   etScoresFromWinner,
   etWinnerFromScores,
   formatKnockoutPredictionSummary,
+  formatPenaltyShootoutResult,
   isDrawScore,
   penaltyWinnerFromScores,
   validateKnockoutPrediction,
@@ -483,6 +484,62 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
     match.stage,
   ]);
 
+  const finishedPenaltyDisplay = useMemo(() => {
+    if (!hasResult || !isKnockout) return null;
+    const rh = match.resultHomeScore!;
+    const ra = match.resultAwayScore!;
+    if (!isDrawScore(rh, ra)) return null;
+
+    const penH = match.resultPenaltyHomeScore;
+    const penA = match.resultPenaltyAwayScore;
+    if (
+      penH != null &&
+      penA != null &&
+      Number.isFinite(penH) &&
+      Number.isFinite(penA) &&
+      penH !== penA
+    ) {
+      return {
+        penHome: penH,
+        penAway: penA,
+        summary: formatPenaltyShootoutResult(match.home, match.away, penH, penA),
+      };
+    }
+
+    if (match.resultPenaltyWinner === "home" || match.resultPenaltyWinner === "away") {
+      const winner = match.resultPenaltyWinner === "home" ? match.home : match.away;
+      return { penHome: null, penAway: null, summary: `${winner} wins on penalties` };
+    }
+
+    if (
+      legacyKnockoutScoring &&
+      match.resultEtHomeScore != null &&
+      match.resultEtAwayScore != null &&
+      !isDrawScore(match.resultEtHomeScore, match.resultEtAwayScore)
+    ) {
+      return {
+        penHome: null,
+        penAway: null,
+        summary: `Extra time: ${match.resultEtHomeScore}–${match.resultEtAwayScore}`,
+      };
+    }
+
+    return null;
+  }, [
+    hasResult,
+    isKnockout,
+    legacyKnockoutScoring,
+    match.away,
+    match.home,
+    match.resultAwayScore,
+    match.resultEtAwayScore,
+    match.resultEtHomeScore,
+    match.resultHomeScore,
+    match.resultPenaltyAwayScore,
+    match.resultPenaltyHomeScore,
+    match.resultPenaltyWinner,
+  ]);
+
   const scoreInputClass =
     "h-10 w-14 rounded-lg border border-secondary-border bg-background px-1 text-center text-sm tabular-nums outline-none focus:border-secondary-300 focus:ring-2 focus:ring-primary-500/30 disabled:opacity-60";
 
@@ -516,41 +573,74 @@ export function FixtureCard({ match }: { match: FixtureMatch }) {
           {isFinished ? (
             <div className="flex flex-col items-center gap-3">
               {hasResult ? (
-                <div className="flex items-center justify-center gap-4">
-                  <span className="min-w-10 text-center text-2xl font-semibold tabular-nums text-primary-text">
-                    {match.resultHomeScore}
-                  </span>
-                  <span className="text-sm font-medium text-gray-300">vs</span>
-                  <span className="min-w-10 text-center text-2xl font-semibold tabular-nums text-primary-text">
-                    {match.resultAwayScore}
-                  </span>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center justify-center gap-4">
+                    <span className="min-w-10 text-center text-2xl font-semibold tabular-nums text-primary-text">
+                      {match.resultHomeScore}
+                    </span>
+                    <span className="text-sm font-medium text-gray-300">vs</span>
+                    <span className="min-w-10 text-center text-2xl font-semibold tabular-nums text-primary-text">
+                      {match.resultAwayScore}
+                    </span>
+                  </div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-secondary-text">
+                    {finishedPenaltyDisplay ? "Full-time" : "Final score"}
+                  </p>
+                  {finishedPenaltyDisplay?.penHome != null &&
+                  finishedPenaltyDisplay.penAway != null ? (
+                    <div className="mt-1 flex flex-col items-center gap-1.5">
+                      <div className="inline-flex items-center gap-3 rounded-xl bg-primary-50 px-4 py-2 ring-1 ring-primary-100">
+                        <span className="text-sm" aria-hidden="true">
+                          ⚽
+                        </span>
+                        <span className="min-w-8 text-center text-xl font-semibold tabular-nums text-primary-text">
+                          {finishedPenaltyDisplay.penHome}
+                        </span>
+                        <span className="text-sm font-medium text-gray-300">–</span>
+                        <span className="min-w-8 text-center text-xl font-semibold tabular-nums text-primary-text">
+                          {finishedPenaltyDisplay.penAway}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-secondary-text">
+                        Penalties
+                      </p>
+                      {finishedPenaltyDisplay.summary ? (
+                        <p className="text-center text-xs font-medium text-primary-700">
+                          {finishedPenaltyDisplay.summary}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : finishedPenaltyDisplay?.summary ? (
+                    <p className="mt-1 text-center text-xs font-medium text-primary-700">
+                      {finishedPenaltyDisplay.summary}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-sm text-secondary-text">Final score not recorded</p>
               )}
-              <p className="text-xs font-medium uppercase tracking-wide text-secondary-text">
-                Final score
-              </p>
               {prediction ? (
-                <p className="max-w-sm text-center text-sm text-tertiary-700">
-                  Your prediction:{" "}
-                  <span className="rounded-md bg-primary-50 px-1.5 py-0.5 font-semibold tabular-nums text-primary-700">
+                <div className="flex max-w-sm flex-col items-center gap-1.5 text-center text-sm text-tertiary-700">
+                  <span className="text-xs text-secondary-text">Your prediction</span>
+                  <span className="inline-flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5 rounded-md bg-primary-50 px-2 py-1 font-semibold leading-snug tabular-nums text-primary-700">
                     {predictionSummary(prediction)}
                   </span>
                   {earnedPoints != null ? (
-                    <span className={`ml-1.5 ${predictionPointsClass(earnedPoints)}`}>
+                    <span
+                      className={`inline-flex flex-wrap items-center justify-center gap-x-1 leading-snug ${predictionPointsClass(earnedPoints)}`}
+                    >
                       {earnedPoints} {earnedPoints === 1 ? "point" : "points"}
-                      <span className="ml-1 font-normal text-secondary-text">
+                      <span className="font-normal text-secondary-text">
                         ({predictionPointsLabel(earnedPoints, match.stage, match.knockoutScoringVersion)})
                       </span>
                     </span>
                   ) : null}
-                </p>
+                </div>
               ) : (
-                <p className="text-sm text-tertiary-700">
-                  No prediction submitted{" "}
+                <div className="flex flex-col items-center gap-1.5 text-sm text-tertiary-700">
+                  <span>No prediction submitted</span>
                   <span className={predictionPointsClass(0)}>0 points</span>
-                </p>
+                </div>
               )}
             </div>
           ) : (
