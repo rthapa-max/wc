@@ -2,22 +2,11 @@ import Link from "next/link";
 import type { FunAward, FunFact } from "@/lib/predictionStats";
 
 const AWARD_ACCENTS = [
-  {
-    badge: "bg-primary-600 text-primary-foreground",
-    card: "border-primary-200 bg-linear-to-br from-primary-50 to-background",
-  },
-  {
-    badge: "bg-yellow-400 text-brown-500",
-    card: "border-yellow-400 bg-linear-to-br from-yellow-300/40 to-background",
-  },
-  {
-    badge: "bg-surface-blue-300 text-primary-700",
-    card: "border-surface-blue-200 bg-linear-to-br from-surface-blue-50 to-background",
-  },
-  {
-    badge: "bg-orange-500 text-white",
-    card: "border-orange-50 bg-linear-to-br from-orange-50 to-background",
-  },
+  { bar: "bg-primary-600", card: "border-primary-100 bg-primary-50/50" },
+  { bar: "bg-yellow-500", card: "border-yellow-400/60 bg-yellow-300/15" },
+  { bar: "bg-surface-blue-400", card: "border-surface-blue-200 bg-surface-blue-50/70" },
+  { bar: "bg-orange-500", card: "border-orange-50 bg-orange-50/50" },
+  { bar: "bg-secondary-400", card: "border-secondary-200 bg-secondary-50/70" },
 ] as const;
 
 function MedalIcon() {
@@ -83,14 +72,11 @@ export function Superlatives({
               return (
                 <div
                   key={award.key}
-                  className={`min-w-[13rem] shrink-0 snap-start rounded-xl border px-4 py-3.5 sm:min-w-0 sm:shrink ${accent.card}`}
+                  className={`relative min-w-52 shrink-0 snap-start overflow-hidden rounded-xl border pl-4 pr-4 py-3.5 sm:min-w-0 sm:shrink ${accent.card}`}
                 >
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${accent.badge}`}
-                  >
-                    {award.title}
-                  </span>
-                  <p className="mt-2 text-[11px] text-secondary-text">{award.blurb}</p>
+                  <span className={`absolute inset-y-0 left-0 w-1 ${accent.bar}`} aria-hidden="true" />
+                  <p className="text-sm font-semibold text-primary-text">{award.title}</p>
+                  <p className="mt-0.5 text-[11px] text-secondary-text">{award.blurb}</p>
                   <p className="mt-2 truncate font-semibold text-primary-text">{award.winnerName}</p>
                   <p className="text-xs text-secondary-text">{award.value}</p>
                 </div>

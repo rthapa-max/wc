@@ -175,11 +175,17 @@ function topByMetric(
 
 const MIN_AWARD_SAMPLE = 5;
 
+type UserRawStats = {
+  totalGoals: number;
+  predictions: number;
+  scorelineCounts: Map<string, number>;
+};
+
 export function computeFunAwards(
   rows: UserStatsRow[],
   pointRows: PredictionPointRow[],
 ): { awards: FunAward[]; facts: FunFact[] } {
-  const goalsByUser = new Map<string, { totalGoals: number; predictions: number }>();
+  const goalsByUser = new Map<string, UserRawStats>();
   const globalScorelines = new Map<string, number>();
   let totalGoalsPredicted = 0;
   let totalPredictions = 0;
@@ -194,9 +200,14 @@ export function computeFunAwards(
     const scoreline = `${row.predicted_home_score}-${row.predicted_away_score}`;
     globalScorelines.set(scoreline, (globalScorelines.get(scoreline) ?? 0) + 1);
 
-    const entry = goalsByUser.get(row.user_id) ?? { totalGoals: 0, predictions: 0 };
+    const entry = goalsByUser.get(row.user_id) ?? {
+      totalGoals: 0,
+      predictions: 0,
+      scorelineCounts: new Map<string, number>(),
+    };
     entry.totalGoals += goals;
     entry.predictions += 1;
+    entry.scorelineCounts.set(scoreline, (entry.scorelineCounts.get(scoreline) ?? 0) + 1);
     goalsByUser.set(row.user_id, entry);
   }
 
@@ -222,7 +233,7 @@ export function computeFunAwards(
 
   pushAward(
     "oracle",
-    "The Oracle",
+    "Most Accurate Predictor",
     "Best exact-score accuracy",
     pool.filter((r) => r.exactPct != null),
     (r) => r.exactPct ?? 0,
@@ -231,7 +242,7 @@ export function computeFunAwards(
 
   pushAward(
     "wooden-spoon",
-    "Wooden Spoon",
+    "Lowest Point Total",
     "Fewest points on the board",
     active,
     (r) => r.totalPoints,
@@ -241,7 +252,7 @@ export function computeFunAwards(
 
   pushAward(
     "fence-sitter",
-    "Fence Sitter",
+    "Most Draw Picks",
     "Can't resist calling a draw",
     pool,
     (r) => r.drawPredictions / r.totalPredictions,
@@ -249,8 +260,27 @@ export function computeFunAwards(
   );
 
   pushAward(
+    "risk-taker",
+    "Fewest Draw Picks",
+    "Almost never predicts a draw",
+    pool,
+    (r) => r.drawPredictions / r.totalPredictions,
+    (r) => `${Math.round((r.drawPredictions / r.totalPredictions) * 100)}% draw picks`,
+    false,
+  );
+
+  pushAward(
+    "draw-whisperer",
+    "Best Draw Accuracy",
+    "Correctly called the most draws",
+    active.filter((r) => r.drawCorrect > 0),
+    (r) => r.drawCorrect,
+    (r) => `${r.drawCorrect} draws called correctly`,
+  );
+
+  pushAward(
     "bridesmaid",
-    "So Close!",
+    "Most Near Misses",
     "Right winner, wrong score — the most",
     active,
     (r) => r.correctOutcome,
@@ -259,7 +289,7 @@ export function computeFunAwards(
 
   pushAward(
     "chaos-agent",
-    "Chaos Agent",
+    "Most Incorrect Outcomes",
     "Called the wrong winner most often",
     active,
     (r) => r.wrongOutcome,
@@ -268,7 +298,7 @@ export function computeFunAwards(
 
   pushAward(
     "completionist",
-    "The Completionist",
+    "Most Predictions Submitted",
     "Never missed a fixture",
     active,
     (r) => r.totalPredictions,
@@ -293,7 +323,7 @@ export function computeFunAwards(
   if (mostGoals) {
     awards.push({
       key: "goal-rush",
-      title: "Goal Rush",
+      title: "Highest-Scoring Forecasts",
       blurb: "Predicts the highest-scoring matches",
       winnerName: nameFor(mostGoals.row),
       value: `${mostGoals.avgGoals.toFixed(1)} goals/match picked`,
@@ -303,10 +333,41 @@ export function computeFunAwards(
   if (fewestGoals) {
     awards.push({
       key: "lockdown-defender",
-      title: "Lockdown Defender",
+      title: "Lowest-Scoring Forecasts",
       blurb: "Predicts the tightest, lowest-scoring matches",
       winnerName: nameFor(fewestGoals.row),
       value: `${fewestGoals.avgGoals.toFixed(1)} goals/match picked`,
+    });
+  }
+
+  const signatureRows = pool
+    .map((r) => {
+      const raw = goalsByUser.get(r.userId);
+      if (!raw || raw.predictions === 0) return null;
+      let bestScoreline: string | null = null;
+      let bestCount = 0;
+      for (const [scoreline, count] of raw.scorelineCounts) {
+        if (count > bestCount) {
+          bestScoreline = scoreline;
+          bestCount = count;
+        }
+      }
+      if (!bestScoreline) return null;
+      return { row: r, scoreline: bestScoreline, ratio: bestCount / raw.predictions };
+    })
+    .filter((v): v is { row: UserStatsRow; scoreline: string; ratio: number } => v !== null);
+
+  const mostRepetitive = signatureRows.length
+    ? [...signatureRows].sort((a, b) => b.ratio - a.ratio)[0]
+    : undefined;
+
+  if (mostRepetitive) {
+    awards.push({
+      key: "creature-of-habit",
+      title: "Most Repeated Scoreline",
+      blurb: "Keeps calling the same scoreline",
+      winnerName: nameFor(mostRepetitive.row),
+      value: `Picked ${mostRepetitive.scoreline} in ${Math.round(mostRepetitive.ratio * 100)}% of predictions`,
     });
   }
 
@@ -328,6 +389,10 @@ export function computeFunAwards(
     facts.push({
       key: "draw-share",
       text: `${Math.round((totalDrawsPredicted / totalPredictions) * 100)}% of all predictions submitted have been draws.`,
+    });
+    facts.push({
+      key: "total-goals",
+      text: `${totalGoalsPredicted} goals have been predicted across every submitted pick this tournament.`,
     });
   }
   if (topScoreline) {
