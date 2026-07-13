@@ -1,6 +1,6 @@
 import { TopBar } from "@/app/components/TopBar";
 import { LeaderboardTable } from "@/app/components/LeaderboardTable";
-import { ScoringGuide } from "@/app/components/ScoringGuide";
+import { HomeSuperlatives } from "@/app/components/HomeSuperlatives";
 import { FixturesFromSupabase } from "@/app/components/FixturesFromSupabase";
 import { RequireAuth } from "@/app/components/RequireAuth";
 
@@ -18,11 +18,7 @@ export default function Home() {
           </div> */}
 
           <div className="space-y-8 sm:space-y-10">
-            <div className="grid grid-cols-1 lg:grid-cols-12">
-              <div className="lg:col-span-8">
-                <ScoringGuide />
-              </div>
-            </div>
+            <HomeSuperlatives />
 
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-8 lg:items-start">
               <section className="lg:col-span-7">

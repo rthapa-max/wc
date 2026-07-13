@@ -1,24 +1,8 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getSessionCookieName, verifySession } from "@/lib/auth";
+import { requireAdmin } from "@/lib/adminAuth";
 import { isDrawScore, penaltyWinnerFromScores } from "@/lib/knockoutPrediction";
 import { usesLegacyKnockoutScoring } from "@/lib/knockoutScoring";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-
-async function requireAdmin() {
-  const jar = await cookies();
-  const token = jar.get(getSessionCookieName())?.value;
-  if (!token) return null;
-  try {
-    const user = await verifySession(token);
-    const supabase = getSupabaseServerClient();
-    const { data } = await supabase.from("app_users").select("is_admin").eq("id", user.id).maybeSingle();
-    if (!data?.is_admin) return null;
-    return user;
-  } catch {
-    return null;
-  }
-}
 
 export async function PUT(req: Request) {
   const admin = await requireAdmin();

@@ -1,4 +1,5 @@
 import { TopBar } from "@/app/components/TopBar";
+import { AdminPredictions } from "@/app/components/admin/AdminPredictions";
 import { AdminResults } from "@/app/components/admin/AdminResults";
 import { RequireAuth } from "@/app/components/RequireAuth";
 
@@ -11,10 +12,14 @@ export default function AdminPage() {
           <div className="mb-6">
             <h1 className="font-semibold text-xl tracking-tight sm:text-2xl">Admin</h1>
             <p className="mt-1 text-sm text-secondary-text">
-              Enter match results, update knockout team names, and correct finished scores.
+              Enter match results, add predictions for users, update knockout team names, and correct
+              finished scores.
             </p>
           </div>
-          <AdminResults />
+          <div className="space-y-8">
+            <AdminPredictions />
+            <AdminResults />
+          </div>
         </main>
       </div>
     </RequireAuth>
