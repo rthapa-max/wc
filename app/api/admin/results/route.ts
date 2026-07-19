@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/adminAuth";
 import { isDrawScore, penaltyWinnerFromScores } from "@/lib/knockoutPrediction";
 import { usesLegacyKnockoutScoring } from "@/lib/knockoutScoring";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { isKnockoutStage } from "@/lib/teams";
 
 export async function PUT(req: Request) {
   const admin = await requireAdmin();
@@ -50,14 +51,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ ok: false, message: "Cannot change teams on a finished match." }, { status: 400 });
     }
 
-    const knockoutStages = new Set([
-      "Round of 32",
-      "Round of 16",
-      "Quarter-final",
-      "Semi-final",
-      "Final",
-    ]);
-    if (!fixture.stage || !knockoutStages.has(fixture.stage)) {
+    if (!isKnockoutStage(fixture.stage)) {
       return NextResponse.json(
         { ok: false, message: "Team names can only be updated for knockout fixtures." },
         { status: 400 },
@@ -88,14 +82,7 @@ export async function PUT(req: Request) {
     if (fetchErr) return NextResponse.json({ ok: false, message: fetchErr.message }, { status: 500 });
     if (!fixture) return NextResponse.json({ ok: false, message: "Fixture not found." }, { status: 404 });
 
-    const knockoutStages = new Set([
-      "Round of 32",
-      "Round of 16",
-      "Quarter-final",
-      "Semi-final",
-      "Final",
-    ]);
-    const isKnockout = fixture.stage != null && knockoutStages.has(fixture.stage);
+    const isKnockout = isKnockoutStage(fixture.stage);
 
     let resultEtHome: number | null = null;
     let resultEtAway: number | null = null;

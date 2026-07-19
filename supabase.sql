@@ -191,7 +191,8 @@ as $$
     'Round of 16',
     'Quarter-final',
     'Semi-final',
-    'Final'
+    'Final',
+    'Play-off for third place'
   );
 $$;
 

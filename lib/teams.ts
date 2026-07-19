@@ -4,6 +4,7 @@ export const KNOCKOUT_STAGES = [
   "Quarter-final",
   "Semi-final",
   "Final",
+  "Play-off for third place",
 ] as const;
 
 export function isKnockoutStage(stage: string | null | undefined) {
